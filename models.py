@@ -2,6 +2,7 @@
     This module contains models definition
 """
 
+import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -110,6 +111,22 @@ class RekNetM1(nn.Module):
         self.decoder3 = DecoderBlockM1(128, 64, bn_enable=self.bn_enable)
         self.decoder2 = DecoderBlockM1(64, 32, bn_enable=self.bn_enable)
         self.decoder1 = DecoderBlockM1(32, self.num_classes, bn_enable=self.bn_enable)
+
+        #Initialization
+        # for m in self.modules():
+        #     if isinstance(m, (nn.Conv2d, nn.ConvTranspose2d)):
+        #         nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+        #     elif isinstance(m, nn.BatchNorm2d):
+        #         nn.init.normal_(m.weight, mean=0, std=1)
+        #         nn.init.zeros_(m)
+
+        for m in self.modules():
+            if isinstance(m, (nn.Conv2d, nn.ConvTranspose2d)):
+                n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
+                m.weight.data.normal_(0, math.sqrt(2. / n))
+            elif isinstance(m, nn.BatchNorm2d):
+                m.weight.data.fill_(1)
+                m.bias.data.zero_()
 
     def forward(self, x):
         x = self.encoder1(x)
