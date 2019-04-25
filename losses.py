@@ -6,7 +6,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-class BCEHaccardLoss:
+class BCEJaccardLoss:
     """
         This loss consists from two parts: (1 - alpha) * BCE - alpha * log(Jaccard)
     """
