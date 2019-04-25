@@ -89,7 +89,7 @@ class RekNetM1(nn.Module):
     """
         Simple baseline FCN model:  Enc1(3->32) --> Enc2(32->64) --> Enc3(64->128) --> Enc4(128->256) --> Enc5(256->512) 
                                             --> center(512->512) --> 
-                                    Dec5(512->256) --> Dec4(256->128) --> Dec3(128->64) --> Dec2(64->32) --> Dec1(32->1)
+                                    Dec5(512->256) --> Dec4(256->128) --> Dec3(128->64) --> Dec2(64->32) --> Dec1(32->32) --> Conv(32->1)
     """
     def __init__(self, num_classes=1, bn_enable=False):
         super(RekNetM1, self).__init__()
@@ -110,7 +110,9 @@ class RekNetM1(nn.Module):
         self.decoder4 = DecoderBlockM1(256, 128, bn_enable=self.bn_enable)
         self.decoder3 = DecoderBlockM1(128, 64, bn_enable=self.bn_enable)
         self.decoder2 = DecoderBlockM1(64, 32, bn_enable=self.bn_enable)
-        self.decoder1 = DecoderBlockM1(32, self.num_classes, bn_enable=self.bn_enable)
+        self.decoder1 = DecoderBlockM1(32, 32, bn_enable=False)
+
+        self.final = nn.Conv2d(32, self.num_classes, kernel_size=1)
 
         #Initialization
         # for m in self.modules():
@@ -147,5 +149,7 @@ class RekNetM1(nn.Module):
         x = self.decoder3(x)
         x = self.decoder2(x)
         x = self.decoder1(x)
+
+        x = self.final(x)
 
         return x
