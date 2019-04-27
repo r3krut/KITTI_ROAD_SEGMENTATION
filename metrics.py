@@ -32,7 +32,7 @@ def validation(model: nn.Module, criterion, valid_loader):
         valid_jaccard = np.mean(jaccards).astype(dtype=np.float64)  
         valid_dice = np.mean(dices).astype(dtype=np.float64)      
         
-        print("Validation loss: {0}, Validation Jaccard: {1}, Validation DICE: {2}".format(valid_loss, valid_jaccard, valid_dice))
+        #print("Validation loss: {0}, Validation Jaccard: {1}, Validation DICE: {2}".format(valid_loss, valid_jaccard, valid_dice))
         return {"val_loss": valid_loss, "val_jacc": valid_jaccard, "val_dice": valid_dice}
 
 
