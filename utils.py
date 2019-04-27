@@ -67,7 +67,11 @@ def train_routine(root: str,
 
     #Load model if it exists
     root = Path(root)
+    root.mkdir(exist_ok=True, parents=True)
+
     model_root = root / 'models' / model_name
+    model_root.mkdir(exist_ok=True, parents=True)
+
     model_path = model_root / 'model.pt'
     logging_path = model_root / 'logging.log'
 
