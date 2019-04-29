@@ -7,6 +7,7 @@ import torch.nn as nn
 
 import copy
 import json
+import logging
 from pathlib import Path
 from datetime import datetime
 
@@ -29,18 +30,26 @@ def save_model(model_path: str, model: nn.Module, best_jaccard, best_dice, epoch
     torch.save({"best_jaccard": best_jaccard, "best_dice": best_dice, "epoch": epoch, "model": model.state_dict}, model_path)
 
 
-def logging(file_path, epoch: int, **data):
+def make_info_string(sep=',', **kwargs):
     """
-        Preforms logging to file
+        Construct an information string in the following view: key1: value1[sep]key2: value2[sep][(keyN: valueN)]
+        params:
+            sep         : a separator between instances. Possible values: ',', '\n'
+            **kwargs    : params
     """
-    data['epoch'] = epoch
-    data['dt'] = datetime.now().isoformat()
-    file_path.write(json.dumps(data, sort_keys=True))
-    file_path.write('\n')
-    file_path.flush()
+    
+    if sep not in [',', '\n']:
+        ValueError("Wrong separator: {}. 'sep' must be: ',' or '\n'".format(sep))
+    
+    info_str = ""
+    for key, value in kwargs.items():
+        info_str += "{0}: {1}{2} ".format(key, value, sep)
+    info_str = info_str[:-2] if info_str[-2] == ',' else info_str[:-1]
+    return info_str
 
 
-def train_routine(root: str, 
+def train_routine(console_logger: logging.Logger,
+    root: str, 
     model_name: str,
     model: nn.Module, 
     criterion, 
@@ -54,6 +63,7 @@ def train_routine(root: str,
     """
         General trainig routine.
         params:
+            console_logger          : logger object for logging
             model_name              : name of a training model
             model                   : model for training
             criterion               : loss function
@@ -73,15 +83,23 @@ def train_routine(root: str,
     model_root.mkdir(exist_ok=True, parents=True)
 
     model_path = model_root / 'model.pt'
-    logging_path = model_root / 'logging.log'
+    logging_path = model_root / 'train.log'
+    
+    #file logger definition
+    file_logger = logging.getLogger("file-logger")
+    fh = logging.FileHandler(str(logging_path))
+    fh.setLevel(logging.DEBUG)
+    formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+    fh.setFormatter(formatter)
+    file_logger.addHandler(fh)
 
     if model_path.exists():
         state = torch.load(str(model_path))
         epoch = state["epoch"]
         best_jaccard = state["best_jaccard"]
         best_dice = state["best_dice"]
-        model.load_state_dict(state["model"])
-        print("Model '{0}' was restored. Best Jaccard: {1}, Best DICE: {2}, Epoch: {3}".format(str(model_path), best_jaccard, best_dice, epoch)) 
+        model.load_state_dict(state["model"]) 
+        console_logger.info("\nModel '{0}' was restored. Best Jaccard: {1}, Best DICE: {2}, Epoch: {3}".format(str(model_path), best_jaccard, best_dice, epoch))
     else:
         epoch = 0
     epoch += 1
@@ -131,32 +149,37 @@ def train_routine(root: str,
                 best_model = copy.deepcopy(model.state_dict())
 
             if epoch and (epoch % status_every == 0):
-                print("Epoch: {}".format(epoch))
-                print("-"*30)
-                print("Train loss: {0}".format(epoch_train_loss))
-                print("Valid loss: {0}".format(valid_dict["val_loss"]))
-                print("Valid Jaccard: {0}".format(valid_dict["val_jacc"]))
-                print("Valid DICE: {0}".format(valid_dict["val_dice"]))
-                print("-"*30)
-                print()
-                valid_dict["train_loss"] = epoch_train_loss
+                info_str = "\nEpoch: {}\n".format(epoch)
+                info_str += "-"*30
+                info_str += "\nTrain loss: {0}".format(epoch_train_loss)
+                info_str += "\nValid loss: {0}".format(valid_dict["val_loss"]) 
+                info_str += "\nValid Jaccard: {0}".format(valid_dict["val_jacc"]) 
+                info_str += "\nValid DICE: {0}".format(valid_dict["val_dice"]) 
+                info_str += "-"*30
+                info_str += "\n"
+                console_logger.info(info_str)
+                
                 #Log to file
-                logging(logging_path, epoch, **valid_dict)
+                info_str = "\ntrain_loss: {}, ".format(epoch_train_loss)
+                info_str += "val_loss: {}, ".format(valid_dict["val_loss"])
+                info_str += "val_jaccard: {}, ".format(valid_dict["val_jacc"])
+                info_str += "val_dice: {}\n".format(valid_dict["val_dice"])
+                file_logger.info(info_str)
 
         except KeyboardInterrupt:
-            print("KeyboardInterrupt, saving snapshot.")
+            console_logger.info("KeyboardInterrupt, saving snapshot.")
             save_model(model_path, best_model, best_jaccard, best_dice, epoch)
-            print("Done!")
+            console_logger.info("Done!")
     
-    print("\nTraining process is done!")
-    print("*"*30)
-    print("Train loss: {0}".format(np.mean(train_losses).astype(dtype=np.float64)))
-    print("Valid loss: {0}".format(np.mean(valid_losses).astype(dtype=np.float64)))
-    print("Mean Jaccard: {0}".format(np.mean(jaccards).astype(dtype=np.float64)))
-    print("Mean DICE: {0}".format(np.mean(dices).astype(dtype=np.float64)))
-    print("Best Jaccard: {0}".format(best_jaccard))
-    print("Beast DICE: {0}".format(best_dice))
-    print("*"*30)
+    info_str = "\nTraining process is done!\n" + "*"*30
+    info_str += "\nTrain loss: {0}".format(np.mean(train_losses).astype(dtype=np.float64)) 
+    info_str += "\nValid loss: {0}".format(np.mean(valid_losses).astype(dtype=np.float64))
+    info_str += "\nMean Jaccard: {0}".format(np.mean(jaccards).astype(dtype=np.float64))
+    info_str += "\nMean DICE: {0}".format(np.mean(dices).astype(dtype=np.float64))
+    info_str += "\nBest Jaccard: {0}".format(best_jaccard)
+    info_str += "\nBest DICE: {0}".format(best_dice) + "*"*30
+
+    console_logger.info(info_str)
 
     #model saving
     save_model(model_path, best_model, best_jaccard, best_dice, n_epochs+1)

@@ -3,7 +3,9 @@
 """
 
 import cv2
+import sys
 import argparse
+import logging
 import numpy as np
 from pathlib import Path
 
@@ -47,6 +49,16 @@ if __name__ == "__main__":
     
     args = parser.parse_args()
 
+    #Console logger definition
+    console_logger = logging.getLogger("console-logger")
+    console_logger.setLevel(logging.INFO)
+    ch = logging.StreamHandler(stream=sys.stdout)
+    formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+    ch.setFormatter(formatter)
+    console_logger.addHandler(ch)
+
+    console_logger.info(args)
+
     #Model definition
     model = RekNetM1(num_classes=1, bn_enable=True)
 
@@ -67,20 +79,21 @@ if __name__ == "__main__":
     train_loader = DataLoader(dataset=train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, pin_memory=True)
     valid_loader = DataLoader(dataset=train_dataset, batch_size=args.batch_size, num_workers=args.num_workers, pin_memory=True)
 
-    print("[TRAIN IFNO] Train dataset length: {}".format(len(train_dataset)))
-    print("[TRAIN INFO] Validation dataset length: {}".format(len(valid_dataset)))
+    console_logger.info("Train dataset length: {}".format(len(train_dataset)))
+    console_logger.info("Validation dataset length: {}".format(len(valid_dataset)))
 
     #Optim definition
     if args.optim == "SGD":
         optim = SGD(params=model.parameters(), lr=args.lr, momentum=args.momentum)
-        print("[TRAIN INFO] Uses the SGD optimizer with lr={0} and momentum={1}".format(args.lr, args.momentum))
+        console_logger.info("Uses the SGD optimizer with lr={0} and momentum={1}".format(args.lr, args.momentum))
     else:
         optim = Adam(params=model.parameters(), lr=args.lr)
-        print("[TRAIN INFO] Uses the Adam optimizer with lr={0}".format(args.lr))
+        console_logger.info("Uses the Adam optimizer with lr={0}".format(args.lr))
 
     valid = validation
 
     utils.train_routine(
+        console_logger=console_logger,
         root=args.root_dir,
         model_name=args.model_name,
         model=model,
@@ -92,7 +105,5 @@ if __name__ == "__main__":
         n_epochs=args.n_epochs,
         status_every=args.status_every
     )
-
-    
 
     
