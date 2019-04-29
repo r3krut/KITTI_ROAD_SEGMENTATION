@@ -52,21 +52,26 @@ class RoadDataset(Dataset):
                 train_mask = load_mask_(str(self.train_labels_paths[idx]))
                 img = img * np.expand_dims((train_mask == 0), axis=2)
                 if self.transforms:
-                    img, valid_mask = self.transforms(img, valid_mask)
-                return img, valid_mask
+                    augmented = self.transforms(image=img, mask=valid_mask)
+                    img, valid_mask = augmented["image"], augmented["mask"] 
+                return numpy_to_tensor(img).float(), torch.from_numpy(np.expand_dims(valid_mask, 0)).float()
             else:
                 img = load_image_(str(self.images_paths[idx]))
                 valid_mask = load_mask_(str(self.valid_labels_paths[idx]))
                 train_mask = load_mask_(str(self.train_labels_paths[idx]))
                 img = img * np.expand_dims((valid_mask == 0), axis=2)
                 if self.transforms:
-                    img, train_mask = self.transforms(img, train_mask)
-                return img, train_mask
+                    augmented = self.transforms(image=img, mask=train_mask)
+                    img, train_mask = augmented["image"], augmented["mask"] 
+                return numpy_to_tensor(img).float(), torch.from_numpy(np.expand_dims(train_mask, 0)).float()
+                
+def numpy_to_tensor(img: np.ndarray):
+    return torch.from_numpy(img).permute(2, 0, 1)
 
 def load_image_(img_path):
     img = cv2.imread(img_path, 1)
-    return img
+    return cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     
 def load_mask_(mask_path):
-    mask = cv2.imread(mask_path, 0).astype(dtype=np.float32)/255
-    return mask
+    mask = cv2.imread(mask_path, 0)
+    return (mask / 255).astype(dtype=np.uint8)

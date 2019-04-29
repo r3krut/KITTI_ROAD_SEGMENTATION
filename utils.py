@@ -79,7 +79,7 @@ def train_routine(console_logger: logging.Logger,
     root = Path(root)
     root.mkdir(exist_ok=True, parents=True)
 
-    model_root = root / 'models' / model_name
+    model_root = root / model_name
     model_root.mkdir(exist_ok=True, parents=True)
 
     model_path = model_root / 'model.pt'
@@ -88,7 +88,7 @@ def train_routine(console_logger: logging.Logger,
     #file logger definition
     file_logger = logging.getLogger("file-logger")
     fh = logging.FileHandler(str(logging_path))
-    fh.setLevel(logging.DEBUG)
+    fh.setLevel(logging.INFO)
     formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
     fh.setFormatter(formatter)
     file_logger.addHandler(fh)
@@ -154,7 +154,7 @@ def train_routine(console_logger: logging.Logger,
                 info_str += "\nTrain loss: {0}".format(epoch_train_loss)
                 info_str += "\nValid loss: {0}".format(valid_dict["val_loss"]) 
                 info_str += "\nValid Jaccard: {0}".format(valid_dict["val_jacc"]) 
-                info_str += "\nValid DICE: {0}".format(valid_dict["val_dice"]) 
+                info_str += "\nValid DICE: {0}\n".format(valid_dict["val_dice"]) 
                 info_str += "-"*30
                 info_str += "\n"
                 console_logger.info(info_str)
@@ -180,6 +180,7 @@ def train_routine(console_logger: logging.Logger,
     info_str += "\nBest DICE: {0}".format(best_dice) + "*"*30
 
     console_logger.info(info_str)
+    file_logger.info(info_str)
 
     #model saving
     save_model(model_path, best_model, best_jaccard, best_dice, n_epochs+1)

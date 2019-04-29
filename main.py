@@ -18,6 +18,11 @@ from losses import BCEJaccardLoss
 from road_dataset import RoadDataset
 from metrics import validation
 
+from transforms import (
+    train_transformations,
+    valid_tranformations,
+)
+
 import torch
 import torch.nn as nn
 from torch.optim import SGD, Adam
@@ -28,7 +33,7 @@ import torch.backends.cudnn
 #For reproducibility
 torch.manual_seed(111)
 
-if __name__ == "__main__":
+def main(*args, **kwargs):
     parser = argparse.ArgumentParser(description="Argument parser for the main module. Main module represents train procedure.")
     parser.add_argument("--root-dir", type=str, required=True, help="Path to the root dir.")
     parser.add_argument("--model-name", type=str, required=True, help="Name of model.")
@@ -74,8 +79,8 @@ if __name__ == "__main__":
     #Loss definition
     loss = BCEJaccardLoss(alpha=args.alpha)
     
-    train_dataset = RoadDataset(dataset_path=Path(args.dataset_path))
-    valid_dataset = RoadDataset(dataset_path=Path(args.dataset_path), is_valid=True)
+    train_dataset = RoadDataset(dataset_path=Path(args.dataset_path), transforms=train_transformations())
+    valid_dataset = RoadDataset(dataset_path=Path(args.dataset_path), transforms=valid_tranformations(), is_valid=True)
     train_loader = DataLoader(dataset=train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, pin_memory=True)
     valid_loader = DataLoader(dataset=train_dataset, batch_size=args.batch_size, num_workers=args.num_workers, pin_memory=True)
 
@@ -106,4 +111,5 @@ if __name__ == "__main__":
         status_every=args.status_every
     )
 
-    
+if __name__ == "__main__":
+    main()

@@ -10,7 +10,7 @@ import numpy as np
 from utils import to_gpu
 
 def validation(model: nn.Module, criterion, valid_loader):
-    with torch.no_grad():
+    with torch.set_grad_enabled(False):
         valid_losses = []
         jaccards = []
         dices = []
@@ -23,9 +23,9 @@ def validation(model: nn.Module, criterion, valid_loader):
             outputs = model(inputs)
 
             loss = criterion(targets, outputs)
-            valid_losses.append(loss)
-            jaccards += calc_jaccard(targets, outputs)
-            dices += calc_dice(targets, outputs)
+            valid_losses.append(loss.item())
+            jaccards += calc_jaccard(targets, (outputs > 0).float())
+            dices += calc_dice(targets, (outputs > 0).float())
 
         #Calculates losses
         valid_loss = np.mean(valid_losses)
@@ -48,5 +48,5 @@ def calc_dice(target: torch.Tensor, predict: torch.Tensor):
     eps = 1e-15
     intersection = (target * predict).sum(dim=-2).sum(dim=-1)
     union = target.sum(dim=-2).sum(dim=-1) + predict.sum(dim=-2).sum(dim=-1)
-    dice = 2 * (intersection + eps) / (union + eps)
+    dice = (2 * (intersection + eps)) / (union + eps)
     return list(dice.data.cpu().numpy())

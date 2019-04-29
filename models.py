@@ -63,7 +63,7 @@ class DecoderBlockM1(nn.Module):
         self.bn_enable = bn_enable
         self.upsample = upsample
 
-        self.deconv = nn.Upsample(scale_factor=2, mode='nearest') if self.upsample else nn.ConvTranspose2d(in_channels=self.in_channels,
+        self.deconv = nn.Upsample(scale_factor=2, mode='bilinear') if self.upsample else nn.ConvTranspose2d(in_channels=self.in_channels,
                                                                                                            out_channels=self.out_channels,
                                                                                                            kernel_size=self.ks,
                                                                                                            stride=self.stride,
@@ -105,12 +105,12 @@ class RekNetM1(nn.Module):
         self.encoder5 = EncoderBlockM1(256, 512, bn_enable=self.bn_enable)
         
         self.center = EncoderBlockM1(512, 512, bn_enable=self.bn_enable)
-
+        
         self.decoder5 = DecoderBlockM1(512, 256, bn_enable=self.bn_enable)
         self.decoder4 = DecoderBlockM1(256, 128, bn_enable=self.bn_enable)
         self.decoder3 = DecoderBlockM1(128, 64, bn_enable=self.bn_enable)
         self.decoder2 = DecoderBlockM1(64, 32, bn_enable=self.bn_enable)
-        self.decoder1 = DecoderBlockM1(32, 32, bn_enable=False)
+        self.decoder1 = DecoderBlockM1(32, 32, bn_enable=self.bn_enable)
 
         self.final = nn.Conv2d(32, self.num_classes, kernel_size=1)
 
@@ -119,11 +119,11 @@ class RekNetM1(nn.Module):
         #     if isinstance(m, (nn.Conv2d, nn.ConvTranspose2d)):
         #         nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
         #     elif isinstance(m, nn.BatchNorm2d):
-        #         nn.init.normal_(m.weight, mean=0, std=1)
-        #         nn.init.zeros_(m)
+        #         m.weight.data.fill_(1)
+        #         m.bias.data.zero_()
 
         for m in self.modules():
-            if isinstance(m, (nn.Conv2d, nn.ConvTranspose2d)):
+            if isinstance(m, (nn.Conv2d)):
                 n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
                 m.weight.data.normal_(0, math.sqrt(2. / n))
             elif isinstance(m, nn.BatchNorm2d):
