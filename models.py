@@ -52,7 +52,7 @@ class DecoderBlockM1(nn.Module):
                        stride=2,
                        padding=1, 
                        bn_enable=False,
-                       upsample=True):
+                       upsample=False):
         super(DecoderBlockM1, self).__init__()
         
         self.in_channels = in_channels
@@ -115,20 +115,20 @@ class RekNetM1(nn.Module):
         self.final = nn.Conv2d(32, self.num_classes, kernel_size=1)
 
         #Initialization
-        # for m in self.modules():
-        #     if isinstance(m, (nn.Conv2d, nn.ConvTranspose2d)):
-        #         nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
-        #     elif isinstance(m, nn.BatchNorm2d):
-        #         m.weight.data.fill_(1)
-        #         m.bias.data.zero_()
-
         for m in self.modules():
             if isinstance(m, (nn.Conv2d, nn.ConvTranspose2d)):
-                n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
-                m.weight.data.normal_(0, math.sqrt(2. / n))
+                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
             elif isinstance(m, nn.BatchNorm2d):
                 m.weight.data.fill_(1)
                 m.bias.data.zero_()
+
+        # for m in self.modules():
+        #     if isinstance(m, (nn.Conv2d, nn.ConvTranspose2d)):
+        #         n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
+        #         m.weight.data.normal_(0, math.sqrt(2. / n))
+        #     elif isinstance(m, nn.BatchNorm2d):
+        #         m.weight.data.fill_(1)
+        #         m.bias.data.zero_()
 
     def forward(self, x):
         x = self.encoder1(x)

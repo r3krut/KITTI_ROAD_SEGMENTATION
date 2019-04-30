@@ -87,8 +87,8 @@ def train_routine(console_logger: logging.Logger,
     
     #file logger definition
     file_logger = logging.getLogger("file-logger")
-    fh = logging.FileHandler(str(logging_path))
-    fh.setLevel(logging.INFO)
+    file_logger.setLevel(logging.INFO)
+    fh = logging.FileHandler(str(logging_path), mode='a')
     formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
     fh.setFormatter(formatter)
     file_logger.addHandler(fh)
@@ -160,7 +160,8 @@ def train_routine(console_logger: logging.Logger,
                 console_logger.info(info_str)
                 
                 #Log to file
-                info_str = "\ntrain_loss: {}, ".format(epoch_train_loss)
+                info_str = "\nepoch: {}, ".format(epoch)
+                info_str += "train_loss: {}, ".format(epoch_train_loss)
                 info_str += "val_loss: {}, ".format(valid_dict["val_loss"])
                 info_str += "val_jaccard: {}, ".format(valid_dict["val_jacc"])
                 info_str += "val_dice: {}\n".format(valid_dict["val_dice"])
@@ -168,7 +169,7 @@ def train_routine(console_logger: logging.Logger,
 
         except KeyboardInterrupt:
             console_logger.info("KeyboardInterrupt, saving snapshot.")
-            save_model(model_path, best_model, best_jaccard, best_dice, epoch)
+            save_model(str(model_path), best_model, best_jaccard, best_dice, epoch)
             console_logger.info("Done!")
     
     info_str = "\nTraining process is done!\n" + "*"*30
@@ -183,7 +184,7 @@ def train_routine(console_logger: logging.Logger,
     file_logger.info(info_str)
 
     #model saving
-    save_model(model_path, best_model, best_jaccard, best_dice, n_epochs+1)
+    save_model(str(model_path), best_model, best_jaccard, best_dice, n_epochs+1)
     
     
     
