@@ -44,7 +44,7 @@ class EncoderBlockM1(nn.Module):
 
 class DecoderBlockM1(nn.Module):
     """
-        Base decoder block: Deconv(Upsample or TrasposeConv) -> BatchNorm(optional) -> ACTIVATION(Relu)
+        Base decoder block: Deconv(Upsample or TrasposeConv2D) -> BatchNorm(optional) -> ACTIVATION(Relu)
     """
     def __init__(self, in_channels, 
                        out_channels,
@@ -91,36 +91,52 @@ class RekNetM1(nn.Module):
                                             --> center(512->512) --> 
                                     Dec5(512->256) --> Dec4(256->128) --> Dec3(128->64) --> Dec2(64->32) --> Dec1(32->32) --> Conv(32->1)
     """
-    def __init__(self, num_classes=1, bn_enable=False):
+    def __init__(self, num_classes=1, ebn_enable=True, dbn_enable=True, upsample_enable=False, init_type="he"):
+        """
+            params:
+                ebn_enable      : encoder batch norm
+                dbn_enable      : decoder batch norm
+                upsample_enable : nn.Upsample used if this parameter is True, else nn.ConvTranspose2D used.
+                init_type       : type of initialization: He or Xavier
+        """
         super(RekNetM1, self).__init__()
         self.num_classes = num_classes
-        self.bn_enable = bn_enable
+        self.ebn_enable = ebn_enable
+        self.dbn_enable = dbn_enable
+        self.upsample_enable = upsample_enable
+        self.init_type = init_type
+
+        if self.init_type not in ["He", "Xavier"]:
+            raise ValueError("Unknown initialization type: {}".format(self.init_type))
 
         self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
 
-        self.encoder1 = EncoderBlockM1(3, 32, bn_enable=self.bn_enable)
-        self.encoder2 = EncoderBlockM1(32, 64, bn_enable=self.bn_enable)
-        self.encoder3 = EncoderBlockM1(64, 128, bn_enable=self.bn_enable)
-        self.encoder4 = EncoderBlockM1(128, 256, bn_enable=self.bn_enable)
-        self.encoder5 = EncoderBlockM1(256, 512, bn_enable=self.bn_enable)
+        self.encoder1 = EncoderBlockM1(3, 32, bn_enable=self.ebn_enable)
+        self.encoder2 = EncoderBlockM1(32, 64, bn_enable=self.ebn_enable)
+        self.encoder3 = EncoderBlockM1(64, 128, bn_enable=self.ebn_enable)
+        self.encoder4 = EncoderBlockM1(128, 256, bn_enable=self.ebn_enable)
+        self.encoder5 = EncoderBlockM1(256, 512, bn_enable=self.ebn_enable)
         
-        self.center = EncoderBlockM1(512, 512, bn_enable=self.bn_enable)
+        self.center = EncoderBlockM1(512, 512, bn_enable=self.ebn_enable)
         
-        self.decoder5 = DecoderBlockM1(512, 256, bn_enable=self.bn_enable)
-        self.decoder4 = DecoderBlockM1(256, 128, bn_enable=self.bn_enable)
-        self.decoder3 = DecoderBlockM1(128, 64, bn_enable=self.bn_enable)
-        self.decoder2 = DecoderBlockM1(64, 32, bn_enable=self.bn_enable)
-        self.decoder1 = DecoderBlockM1(32, 32, bn_enable=self.bn_enable)
+        self.decoder5 = DecoderBlockM1(512, 256, bn_enable=self.dbn_enable, upsample=self.upsample_enable)
+        self.decoder4 = DecoderBlockM1(256, 128, bn_enable=self.dbn_enable, upsample=self.upsample_enable)
+        self.decoder3 = DecoderBlockM1(128, 64, bn_enable=self.dbn_enable, upsample=self.upsample_enable)
+        self.decoder2 = DecoderBlockM1(64, 32, bn_enable=self.dbn_enable, upsample=self.upsample_enable)
+        self.decoder1 = DecoderBlockM1(32, 32, bn_enable=self.dbn_enable, upsample=self.upsample_enable)
 
         self.final = nn.Conv2d(32, self.num_classes, kernel_size=1)
 
         #Initialization
-        for m in self.modules():
-            if isinstance(m, (nn.Conv2d, nn.ConvTranspose2d)):
-                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
-            elif isinstance(m, nn.BatchNorm2d):
-                m.weight.data.fill_(1)
-                m.bias.data.zero_()
+        if self.init_type == "He":
+            for m in self.modules():
+                if isinstance(m, (nn.Conv2d, nn.ConvTranspose2d)):
+                    nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+                elif isinstance(m, nn.BatchNorm2d):
+                    m.weight.data.fill_(1)
+                    m.bias.data.zero_()
+        elif self.init_type == "Xavier":
+            raise NotImplementedError("This type of initialization in not implemented.")
 
         # for m in self.modules():
         #     if isinstance(m, (nn.Conv2d, nn.ConvTranspose2d)):
