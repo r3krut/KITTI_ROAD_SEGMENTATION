@@ -44,6 +44,12 @@ def main(*args, **kwargs):
     parser.add_argument("--lr", type=float, default=1e-3, help="Learning rates for optimizer.")
     parser.add_argument("--momentum", type=float, default=0.9, help="Momentum for SGD optim.")
 
+    #model params
+    parser.add_argument("--decoder-type", type=str, default="up", help="Type of decoder module. Can be 'up'(Upsample) or 'ConvTranspose2D'.")
+    parser.add_argument("--init-type", type=str, default="He", help="Initialization type. Can be 'He' or 'Xavier'.")
+    parser.add_argument("--enc-bn-enable", type=bool, default=True, help="Batch normalization enabling in encoder module.")
+    parser.add_argument("--dec-bn-enable", type=bool, default=True, help="Batch normalization enabling in decoder module.")
+
     #other options
     parser.add_argument("--n-epochs", type=int, default=100, help="Number of training epochs.")
     parser.add_argument("--batch-size", type=int, default=4, help="Number of examples per batch.")
@@ -64,8 +70,19 @@ def main(*args, **kwargs):
 
     console_logger.info(args)
 
+    if args.decoder_type == "up":
+        upsample_enable = True
+        console_logger.info("Decoder type is Upsample.")
+    elif args.decoder_type == "convTr":
+        upsample_enable = False
+        console_logger.info("Decoder type is ConvTranspose2D.")
+
     #Model definition
-    model = RekNetM1(num_classes=1, bn_enable=True)
+    model = RekNetM1(num_classes=1, 
+        ebn_enable=args.enc_bn_enable, 
+        dbn_enable=args.dec_bn_enable, 
+        upsample_enable=upsample_enable, 
+        init_type=args.init_type)
 
     #Move model to devices
     if torch.cuda.is_available():

@@ -13,6 +13,8 @@ from datetime import datetime
 
 import numpy as np
 
+from tb_logger import Logger
+
 def count_params(model: nn.Module) -> (int, int):
     """
         Calculates the total and trainable parameters in model.
@@ -93,6 +95,9 @@ def train_routine(console_logger: logging.Logger,
     fh.setFormatter(formatter)
     file_logger.addHandler(fh)
 
+    #Logging to the TensorBoardX
+    tbx_logger = Logger(log_dir=str(model_root / "tbxlogs"))
+
     if model_path.exists():
         state = torch.load(str(model_path))
         epoch = state["epoch"]
@@ -166,6 +171,10 @@ def train_routine(console_logger: logging.Logger,
                 info_str += "val_jaccard: {}, ".format(valid_dict["val_jacc"])
                 info_str += "val_dice: {}\n".format(valid_dict["val_dice"])
                 file_logger.info(info_str)
+
+                #Log to the tbX
+                tbx_logger.log_scalars(tag="losses", values={"train_loss": epoch_train_loss, "valid_loss": valid_dict["val_loss"]}, step=epoch)
+                tbx_logger.log_scalars(tag="metrics", values={"jaccard": valid_dict["val_jacc"], "DICE": valid_dict["val_dice"]}, step=epoch)
 
         except KeyboardInterrupt:
             console_logger.info("KeyboardInterrupt, saving snapshot.")
