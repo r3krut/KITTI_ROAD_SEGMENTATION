@@ -2,6 +2,7 @@
     This module contains some auxilary functions
 """
 
+import os
 import torch
 import torch.nn as nn
 
@@ -194,7 +195,7 @@ def train_routine(console_logger: logging.Logger,
 
     #model saving
     save_model(str(model_path), best_model, best_jaccard, best_dice, n_epochs+1)
-    
-    
-    
-    
+
+
+def shutdown_system():
+    os.system("shutdown -h now")
