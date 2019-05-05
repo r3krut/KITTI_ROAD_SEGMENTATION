@@ -44,7 +44,7 @@ class RoadDataset(Dataset):
     def __getitem__(self, idx):
         if self.is_test:
             img = load_image_(str(self.images_paths[idx]))
-            return img, str(self.images_paths[idx])
+            return numpy_to_tensor(img).float(), str(self.images_paths[idx])
         else:
             if self.is_valid:
                 img = load_image_(str(self.images_paths[idx]))
@@ -64,14 +64,49 @@ class RoadDataset(Dataset):
                     augmented = self.transforms(image=img, mask=train_mask)
                     img, train_mask = augmented["image"], augmented["mask"] 
                 return numpy_to_tensor(img).float(), torch.from_numpy(np.expand_dims(train_mask, 0)).float()
-                
+
+
+class RoadDataset2(Dataset):
+    """
+        This dataset represents a data without source validation areas.
+    """
+    def __init__(self, img_paths, mask_paths, transforms=None):
+        """
+            params:
+                img_paths         : list with paths to source images
+                maks_paths        : list with paths to masks
+                transforms        : transformations
+        """
+        super().__init__()
+        self.img_paths = sorted(img_paths)
+        self.mask_paths = sorted(mask_paths)
+        self.transforms = transforms
+
+        assert len(self.img_paths) == len(self.mask_paths), "Error. 'img_paths' and 'mask_paths' has different length."
+
+    def __len__(self):
+        return len(self.img_paths)
+
+    def __getitem__(self, idx):
+        img = load_image_(self.img_paths[idx])
+        mask = load_mask_(self.mask_paths[idx])
+
+        if self.transforms:
+            augmented = self.transforms(image=img, mask=mask)
+            img, mask = augmented["image"], augmented["mask"]
+        
+        return numpy_to_tensor(img).float(), torch.from_numpy(np.expand_dims(mask, 0)).float() 
+        
+
 def numpy_to_tensor(img: np.ndarray):
-    return torch.from_numpy(img).permute(2, 0, 1)
+    return torch.from_numpy(np.transpose(img, (2, 0, 1)))
+
 
 def load_image_(img_path):
-    img = cv2.imread(img_path, 1)
+    img = cv2.imread(img_path)
     return cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     
+
 def load_mask_(mask_path):
     mask = cv2.imread(mask_path, 0)
     return (mask / 255).astype(dtype=np.uint8)
