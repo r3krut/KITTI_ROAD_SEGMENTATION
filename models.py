@@ -7,6 +7,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from torchvision import models
+
 class EncoderBlockM1(nn.Module):
     """
         Base encoder block: CONV -> BatchNorm(optional) -> ACTIVATION(RELU)
@@ -42,9 +44,10 @@ class EncoderBlockM1(nn.Module):
         x = self.activation(x)
         return x
 
+
 class DecoderBlockM1(nn.Module):
     """
-        Base decoder block: Deconv(Upsample or TrasposeConv2D) -> BatchNorm(optional) -> ACTIVATION(Relu)
+        Base decoder block: Deconv(Upsample or TrasposeConv2D) -> BatchNorm(optional) -> ACTIVATION(Relu)(Optional)
     """
     def __init__(self, in_channels, 
                        out_channels,
@@ -52,7 +55,8 @@ class DecoderBlockM1(nn.Module):
                        stride=2,
                        padding=1, 
                        bn_enable=False,
-                       upsample=False):
+                       upsample=False,
+                       act_enable=True):
         super(DecoderBlockM1, self).__init__()
         
         self.in_channels = in_channels
@@ -62,6 +66,7 @@ class DecoderBlockM1(nn.Module):
         self.padding = padding
         self.bn_enable = bn_enable
         self.upsample = upsample
+        self.act_enable=act_enable
 
         self.deconv = nn.Upsample(scale_factor=2, mode='bilinear') if self.upsample else nn.ConvTranspose2d(in_channels=self.in_channels,
                                                                                                            out_channels=self.out_channels,
@@ -81,17 +86,19 @@ class DecoderBlockM1(nn.Module):
         if self.bn_enable:
             x = self.bn(x)
 
-        x = self.activation(x)
+        if self.act_enable:
+            x = self.activation(x)
+
         return x
 
 
 class RekNetM1(nn.Module):
     """
-        Simple baseline FCN model:  Enc1(3->32) --> Enc2(32->64) --> Enc3(64->128) --> Enc4(128->256) --> Enc5(256->512) 
-                                            --> center(512->512) --> 
-                                    Dec5(512->256) --> Dec4(256->128) --> Dec3(128->64) --> Dec2(64->32) --> Dec1(32->32) --> Conv(32->1)
+        Simple baseline FCN model:  Enc1(3->32) --> Enc2(32->32) --> Enc3(32->64) --> Enc4(64->64) --> Enc5(64->128) 
+                                            --> center(128->128) --> 
+                                    Dec5(128->64) --> Dec4(64->64) --> Dec3(64->32) --> Dec2(32->32) --> Dec1(32->1)
     """
-    def __init__(self, num_classes=1, ebn_enable=True, dbn_enable=True, upsample_enable=False, init_type="he"):
+    def __init__(self, num_classes=1, ebn_enable=True, dbn_enable=True, upsample_enable=False, init_type="He"):
         """
             params:
                 ebn_enable      : encoder batch norm
@@ -112,20 +119,19 @@ class RekNetM1(nn.Module):
         self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
 
         self.encoder1 = EncoderBlockM1(3, 32, bn_enable=self.ebn_enable)
-        self.encoder2 = EncoderBlockM1(32, 64, bn_enable=self.ebn_enable)
-        self.encoder3 = EncoderBlockM1(64, 128, bn_enable=self.ebn_enable)
-        self.encoder4 = EncoderBlockM1(128, 256, bn_enable=self.ebn_enable)
-        self.encoder5 = EncoderBlockM1(256, 512, bn_enable=self.ebn_enable)
+        self.encoder2 = EncoderBlockM1(32, 32, bn_enable=self.ebn_enable)
+        self.encoder3 = EncoderBlockM1(32, 64, bn_enable=self.ebn_enable)
+        self.encoder4 = EncoderBlockM1(64, 64, bn_enable=self.ebn_enable)
+        self.encoder5 = EncoderBlockM1(64, 128, bn_enable=self.ebn_enable)
         
-        self.center = EncoderBlockM1(512, 512, bn_enable=self.ebn_enable)
+        self.center = EncoderBlockM1(128, 128, bn_enable=self.ebn_enable)
         
-        self.decoder5 = DecoderBlockM1(512, 256, bn_enable=self.dbn_enable, upsample=self.upsample_enable)
-        self.decoder4 = DecoderBlockM1(256, 128, bn_enable=self.dbn_enable, upsample=self.upsample_enable)
-        self.decoder3 = DecoderBlockM1(128, 64, bn_enable=self.dbn_enable, upsample=self.upsample_enable)
-        self.decoder2 = DecoderBlockM1(64, 32, bn_enable=self.dbn_enable, upsample=self.upsample_enable)
-        self.decoder1 = DecoderBlockM1(32, 32, bn_enable=self.dbn_enable, upsample=self.upsample_enable)
+        self.decoder5 = DecoderBlockM1(128, 64, bn_enable=self.dbn_enable, upsample=self.upsample_enable)
+        self.decoder4 = DecoderBlockM1(64, 64, bn_enable=self.dbn_enable, upsample=self.upsample_enable)
+        self.decoder3 = DecoderBlockM1(64, 32, bn_enable=self.dbn_enable, upsample=self.upsample_enable)
+        self.decoder2 = DecoderBlockM1(32, 32, bn_enable=self.dbn_enable, upsample=self.upsample_enable)
+        self.decoder1 = DecoderBlockM1(32, 1, bn_enable=False, upsample=self.upsample_enable, act_enable=False)
 
-        self.final = nn.Conv2d(32, self.num_classes, kernel_size=1)
 
         #Initialization
         if self.init_type == "He":
@@ -137,14 +143,6 @@ class RekNetM1(nn.Module):
                     m.bias.data.zero_()
         elif self.init_type == "Xavier":
             raise NotImplementedError("This type of initialization in not implemented.")
-
-        # for m in self.modules():
-        #     if isinstance(m, (nn.Conv2d, nn.ConvTranspose2d)):
-        #         n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
-        #         m.weight.data.normal_(0, math.sqrt(2. / n))
-        #     elif isinstance(m, nn.BatchNorm2d):
-        #         m.weight.data.fill_(1)
-        #         m.bias.data.zero_()
 
     def forward(self, x):
         x = self.encoder1(x)
@@ -166,6 +164,5 @@ class RekNetM1(nn.Module):
         x = self.decoder2(x)
         x = self.decoder1(x)
 
-        x = self.final(x)
-
         return x
+
