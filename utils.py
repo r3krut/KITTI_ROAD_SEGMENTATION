@@ -8,6 +8,7 @@ import torch.nn as nn
 
 import copy
 import json
+import random
 import logging
 from pathlib import Path
 from datetime import datetime
@@ -29,8 +30,8 @@ def to_gpu(x: torch.Tensor):
     return x.cuda(non_blocking=True) if torch.cuda.is_available() else x
 
 
-def save_model(model_path: str, model: nn.Module, best_jaccard, best_dice, epoch):
-    torch.save({"best_jaccard": best_jaccard, "best_dice": best_dice, "epoch": epoch, "model": model.state_dict}, model_path)
+def save_model(model_path: str, model, best_jaccard, best_dice, epoch):
+    torch.save({"best_jaccard": best_jaccard, "best_dice": best_dice, "epoch": epoch, "model": model}, model_path)
 
 
 def make_info_string(sep=',', **kwargs):
@@ -51,12 +52,105 @@ def make_info_string(sep=',', **kwargs):
     return info_str
 
 
+def trainval_split(images_paths: str, masks_paths: str, fold=5):
+    """
+        Splits images and masks by two sets: train and validation by folds with a small stratification by categories 'uu', 'um' and 'umm'. 
+        Possible value for 'fold' is: 1, 2, 3, 4, 5
+        
+        params:
+            images_paths      :   dir with source images(without validation area)
+            masks_paths       :   dir with masks
+            fold              :   number of validation fold
+    """
+
+    images_paths = Path(images_paths)
+    masks_paths = Path(masks_paths)
+
+    images_paths = sorted(list(map(str, images_paths.glob("*"))))
+    masks_paths = sorted(list(map(str, masks_paths.glob("*"))))
+
+    if len(images_paths) < 5:
+        raise RuntimeError("Length of images_paths less then 5.")
+
+    if fold not in range(1,6):
+        raise ValueError("Invalid fold number: {}. 'fold' can be 1,2,3,4 or 5.".format(fold))
+
+    #Urban unmarked
+    uu_imgs_paths = list(filter(lambda p: p.split("/")[-1].startswith("uu_"), images_paths))
+    uu_masks_paths = list(filter(lambda p: p.split("/")[-1].startswith("uu_"), masks_paths))
+
+    #Urban marked
+    um_imgs_paths = list(filter(lambda p: p.split("/")[-1].startswith("um_"), images_paths))
+    um_masks_paths = list(filter(lambda p: p.split("/")[-1].startswith("um_"), masks_paths))
+
+    #Urban multiple mark
+    umm_imgs_paths = list(filter(lambda p: p.split("/")[-1].startswith("umm_"), images_paths))
+    umm_masks_paths = list(filter(lambda p: p.split("/")[-1].startswith("umm_"), masks_paths))
+
+    assert len(uu_imgs_paths) == len(uu_masks_paths), "Error. uu_imgs_paths and uu_masks_paths has differnet length."
+    assert len(um_imgs_paths) == len(um_masks_paths), "Error. um_imgs_paths and um_masks_paths has differnet length."
+    assert len(umm_imgs_paths) == len(umm_masks_paths), "Error. umm_imgs_paths and umm_masks_paths has differnet length."
+
+    uu_imgs_per_fold = round(len(uu_imgs_paths) / 5)
+    um_imgs_per_fold = round(len(um_imgs_paths) / 5)
+    umm_imgs_per_fold = round(len(umm_imgs_paths) / 5)
+
+    #train urban unmarked
+    if fold == 5:
+        #UU
+        valid_uu_imgs_paths = uu_imgs_paths[-(len(uu_imgs_paths)-uu_imgs_per_fold*4):]
+        valid_uu_masks_paths = uu_masks_paths[-(len(uu_imgs_paths)-uu_imgs_per_fold*4):]
+        train_uu_imgs_paths = list(set(uu_imgs_paths) - set(valid_uu_imgs_paths))
+        train_uu_masks_paths = list(set(uu_masks_paths) - set(valid_uu_masks_paths))
+
+        #UM
+        valid_um_imgs_paths = um_imgs_paths[-(len(um_imgs_paths)-um_imgs_per_fold*4):]
+        valid_um_masks_paths = um_masks_paths[-(len(um_imgs_paths)-um_imgs_per_fold*4):]
+        train_um_imgs_paths = list(set(um_imgs_paths) - set(valid_um_imgs_paths))
+        train_um_masks_paths = list(set(um_masks_paths) - set(valid_um_masks_paths))
+
+        #UMM
+        valid_umm_imgs_paths = umm_imgs_paths[-(len(umm_imgs_paths)-umm_imgs_per_fold*4):]
+        valid_umm_masks_paths = umm_masks_paths[-(len(umm_imgs_paths)-umm_imgs_per_fold*4):]
+        train_umm_imgs_paths = list(set(umm_imgs_paths) - set(valid_umm_imgs_paths))
+        train_umm_masks_paths = list(set(umm_masks_paths) - set(valid_umm_masks_paths))
+    else:
+        #UU
+        valid_uu_imgs_paths = uu_imgs_paths[:fold*uu_imgs_per_fold][-uu_imgs_per_fold:]
+        valid_uu_masks_paths = uu_masks_paths[:fold*uu_imgs_per_fold][-uu_imgs_per_fold:]
+        train_uu_imgs_paths = list(set(uu_imgs_paths) - set(valid_uu_imgs_paths))
+        train_uu_masks_paths = list(set(uu_masks_paths) - set(valid_uu_masks_paths))
+
+        #UM
+        valid_um_imgs_paths = um_imgs_paths[:fold*um_imgs_per_fold][-um_imgs_per_fold:]
+        valid_um_masks_paths = um_masks_paths[:fold*um_imgs_per_fold][-um_imgs_per_fold:]
+        train_um_imgs_paths = list(set(um_imgs_paths) - set(valid_um_imgs_paths))
+        train_um_masks_paths = list(set(um_masks_paths) - set(valid_um_masks_paths))
+
+        #UMM
+        valid_umm_imgs_paths = umm_imgs_paths[:fold*umm_imgs_per_fold][-umm_imgs_per_fold:]
+        valid_umm_masks_paths = umm_masks_paths[:fold*umm_imgs_per_fold][-umm_imgs_per_fold:]
+        train_umm_imgs_paths = list(set(umm_imgs_paths) - set(valid_umm_imgs_paths))
+        train_umm_masks_paths = list(set(umm_masks_paths) - set(valid_umm_masks_paths))
+
+    #total train
+    train_imgs_total = train_uu_imgs_paths + train_um_imgs_paths + train_umm_imgs_paths
+    train_masks_total = train_uu_masks_paths + train_um_masks_paths + train_umm_masks_paths
+
+    #total valid
+    valid_imgs_total = valid_uu_imgs_paths + valid_um_imgs_paths + valid_umm_imgs_paths
+    valid_masks_total = valid_uu_masks_paths + valid_um_masks_paths + valid_umm_masks_paths
+
+    return ((train_imgs_total, train_masks_total), (valid_imgs_total, valid_masks_total))
+
+
 def train_routine(console_logger: logging.Logger,
     root: str, 
     model_name: str,
     model: nn.Module, 
     criterion, 
     optimizer,
+    scheduler,
     train_loader, 
     valid_loader,
     validation,
@@ -71,6 +165,7 @@ def train_routine(console_logger: logging.Logger,
             model                   : model for training
             criterion               : loss function
             optimizer               : SGD, Adam or other
+            scheduler               : learning rate scheduler
             train_loader            :
             valid_loader            :
             validation              : validation routine
@@ -91,7 +186,7 @@ def train_routine(console_logger: logging.Logger,
     #file logger definition
     file_logger = logging.getLogger("file-logger")
     file_logger.setLevel(logging.INFO)
-    fh = logging.FileHandler(str(logging_path), mode='a')
+    fh = logging.FileHandler(str(logging_path), mode='w')
     formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
     fh.setFormatter(formatter)
     file_logger.addHandler(fh)
@@ -108,10 +203,11 @@ def train_routine(console_logger: logging.Logger,
         console_logger.info("\nModel '{0}' was restored. Best Jaccard: {1}, Best DICE: {2}, Epoch: {3}".format(str(model_path), best_jaccard, best_dice, epoch))
     else:
         epoch = 0
+        best_jaccard = 0
+        best_dice = 0
+    
     epoch += 1
-
-    best_jaccard = 0
-    best_dice = 0
+    n_epochs = n_epochs + epoch
     best_model = copy.deepcopy(model.state_dict())
 
     train_losses = []
@@ -119,12 +215,16 @@ def train_routine(console_logger: logging.Logger,
     jaccards = []
     dices = []
 
-    for epoch in range(epoch, n_epochs + 1):
+    for epoch in range(epoch, n_epochs):
         
         epoch_train_losses = []
 
         #Train mode
         model.train()
+        
+        #LR step for MultiStepLR scheduler
+        scheduler.step()
+
         try:
             for i, (inputs, targets) in enumerate(train_loader):
                 inputs = to_gpu(inputs)
@@ -133,7 +233,7 @@ def train_routine(console_logger: logging.Logger,
                 optimizer.zero_grad()
                 with torch.set_grad_enabled(True):
                     outputs = model(inputs)
-                    loss = criterion(outputs, targets)
+                    loss = criterion(targets, outputs)
                     loss.backward()
                     optimizer.step()
                 epoch_train_losses.append(loss.item())
@@ -143,7 +243,10 @@ def train_routine(console_logger: logging.Logger,
             
             #Validation
             valid_dict = validation(model, criterion, valid_loader)
-            
+
+            #LR step for ReduceOnPlateau
+            # scheduler.step(valid_dict["val_jacc"])
+
             train_losses.append(epoch_train_loss)
             valid_losses.append(valid_dict["val_loss"])
             jaccards.append(valid_dict["val_jacc"])
@@ -188,7 +291,7 @@ def train_routine(console_logger: logging.Logger,
     info_str += "\nMean Jaccard: {0}".format(np.mean(jaccards).astype(dtype=np.float64))
     info_str += "\nMean DICE: {0}".format(np.mean(dices).astype(dtype=np.float64))
     info_str += "\nBest Jaccard: {0}".format(best_jaccard)
-    info_str += "\nBest DICE: {0}".format(best_dice) + "*"*30
+    info_str += "\nBest DICE: {0}\n".format(best_dice) + "*"*30
 
     console_logger.info(info_str)
     file_logger.info(info_str)
