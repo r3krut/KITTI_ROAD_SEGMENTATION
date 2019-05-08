@@ -52,7 +52,7 @@ def make_info_string(sep=',', **kwargs):
     return info_str
 
 
-def trainval_split(images_paths: str, masks_paths: str, fold=5):
+def crossval_split(images_paths: str, masks_paths: str, fold=5):
     """
         Splits images and masks by two sets: train and validation by folds with a small stratification by categories 'uu', 'um' and 'umm'. 
         Possible value for 'fold' is: 1, 2, 3, 4, 5
