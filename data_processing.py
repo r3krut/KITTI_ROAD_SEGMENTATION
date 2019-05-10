@@ -94,6 +94,98 @@ def drop_valid(path2train):
         print("Image {0} porcessed.".format(str(src_images_paths[i])))
 
 
+def crossval_split(images_paths: str, masks_paths: str, fold=5):
+    """
+        Splits images and masks by two sets: train and validation by folds with a small stratification by categories 'uu', 'um' and 'umm'. 
+        Possible value for 'fold' is: 1, 2, 3, 4, 5
+        
+        params:
+            images_paths      :   dir with source images(without validation area)
+            masks_paths       :   dir with masks
+            fold              :   number of validation fold
+    """
+
+    images_paths = Path(images_paths)
+    masks_paths = Path(masks_paths)
+
+    images_paths = sorted(list(map(str, images_paths.glob("*"))))
+    masks_paths = sorted(list(map(str, masks_paths.glob("*"))))
+
+    if len(images_paths) < 5:
+        raise RuntimeError("Length of images_paths less then 5.")
+
+    if fold not in range(1,6):
+        raise ValueError("Invalid fold number: {}. 'fold' can be 1,2,3,4 or 5.".format(fold))
+
+    #Urban unmarked
+    uu_imgs_paths = list(filter(lambda p: p.split("/")[-1].startswith("uu_"), images_paths))
+    uu_masks_paths = list(filter(lambda p: p.split("/")[-1].startswith("uu_"), masks_paths))
+
+    #Urban marked
+    um_imgs_paths = list(filter(lambda p: p.split("/")[-1].startswith("um_"), images_paths))
+    um_masks_paths = list(filter(lambda p: p.split("/")[-1].startswith("um_"), masks_paths))
+
+    #Urban multiple mark
+    umm_imgs_paths = list(filter(lambda p: p.split("/")[-1].startswith("umm_"), images_paths))
+    umm_masks_paths = list(filter(lambda p: p.split("/")[-1].startswith("umm_"), masks_paths))
+
+    assert len(uu_imgs_paths) == len(uu_masks_paths), "Error. uu_imgs_paths and uu_masks_paths has differnet length."
+    assert len(um_imgs_paths) == len(um_masks_paths), "Error. um_imgs_paths and um_masks_paths has differnet length."
+    assert len(umm_imgs_paths) == len(umm_masks_paths), "Error. umm_imgs_paths and umm_masks_paths has differnet length."
+
+    uu_imgs_per_fold = round(len(uu_imgs_paths) / 5)
+    um_imgs_per_fold = round(len(um_imgs_paths) / 5)
+    umm_imgs_per_fold = round(len(umm_imgs_paths) / 5)
+
+    #train urban unmarked
+    if fold == 5:
+        #UU
+        valid_uu_imgs_paths = uu_imgs_paths[-(len(uu_imgs_paths)-uu_imgs_per_fold*4):]
+        valid_uu_masks_paths = uu_masks_paths[-(len(uu_imgs_paths)-uu_imgs_per_fold*4):]
+        train_uu_imgs_paths = list(set(uu_imgs_paths) - set(valid_uu_imgs_paths))
+        train_uu_masks_paths = list(set(uu_masks_paths) - set(valid_uu_masks_paths))
+
+        #UM
+        valid_um_imgs_paths = um_imgs_paths[-(len(um_imgs_paths)-um_imgs_per_fold*4):]
+        valid_um_masks_paths = um_masks_paths[-(len(um_imgs_paths)-um_imgs_per_fold*4):]
+        train_um_imgs_paths = list(set(um_imgs_paths) - set(valid_um_imgs_paths))
+        train_um_masks_paths = list(set(um_masks_paths) - set(valid_um_masks_paths))
+
+        #UMM
+        valid_umm_imgs_paths = umm_imgs_paths[-(len(umm_imgs_paths)-umm_imgs_per_fold*4):]
+        valid_umm_masks_paths = umm_masks_paths[-(len(umm_imgs_paths)-umm_imgs_per_fold*4):]
+        train_umm_imgs_paths = list(set(umm_imgs_paths) - set(valid_umm_imgs_paths))
+        train_umm_masks_paths = list(set(umm_masks_paths) - set(valid_umm_masks_paths))
+    else:
+        #UU
+        valid_uu_imgs_paths = uu_imgs_paths[:fold*uu_imgs_per_fold][-uu_imgs_per_fold:]
+        valid_uu_masks_paths = uu_masks_paths[:fold*uu_imgs_per_fold][-uu_imgs_per_fold:]
+        train_uu_imgs_paths = list(set(uu_imgs_paths) - set(valid_uu_imgs_paths))
+        train_uu_masks_paths = list(set(uu_masks_paths) - set(valid_uu_masks_paths))
+
+        #UM
+        valid_um_imgs_paths = um_imgs_paths[:fold*um_imgs_per_fold][-um_imgs_per_fold:]
+        valid_um_masks_paths = um_masks_paths[:fold*um_imgs_per_fold][-um_imgs_per_fold:]
+        train_um_imgs_paths = list(set(um_imgs_paths) - set(valid_um_imgs_paths))
+        train_um_masks_paths = list(set(um_masks_paths) - set(valid_um_masks_paths))
+
+        #UMM
+        valid_umm_imgs_paths = umm_imgs_paths[:fold*umm_imgs_per_fold][-umm_imgs_per_fold:]
+        valid_umm_masks_paths = umm_masks_paths[:fold*umm_imgs_per_fold][-umm_imgs_per_fold:]
+        train_umm_imgs_paths = list(set(umm_imgs_paths) - set(valid_umm_imgs_paths))
+        train_umm_masks_paths = list(set(umm_masks_paths) - set(valid_umm_masks_paths))
+
+    #total train
+    train_imgs_total = train_uu_imgs_paths + train_um_imgs_paths + train_umm_imgs_paths
+    train_masks_total = train_uu_masks_paths + train_um_masks_paths + train_umm_masks_paths
+
+    #total valid
+    valid_imgs_total = valid_uu_imgs_paths + valid_um_imgs_paths + valid_umm_imgs_paths
+    valid_masks_total = valid_uu_masks_paths + valid_um_masks_paths + valid_umm_masks_paths
+
+    return ((train_imgs_total, train_masks_total), (valid_imgs_total, valid_masks_total))
+
+
 def prepare_holdout_dataset(path2data, test_fraction=0.2):
     """
         This method splits a train dataset on train and hold-out data and save this data in a separately directory.

@@ -16,6 +16,10 @@ from datetime import datetime
 import numpy as np
 
 from tb_logger import Logger
+from metrics import (
+    batch_dice, 
+    batch_jaccard,
+)
 
 def count_params(model: nn.Module) -> (int, int):
     """
@@ -52,101 +56,18 @@ def make_info_string(sep=',', **kwargs):
     return info_str
 
 
-def crossval_split(images_paths: str, masks_paths: str, fold=5):
+def save_runparams(params: dict, file_path: str):
     """
-        Splits images and masks by two sets: train and validation by folds with a small stratification by categories 'uu', 'um' and 'umm'. 
-        Possible value for 'fold' is: 1, 2, 3, 4, 5
-        
-        params:
-            images_paths      :   dir with source images(without validation area)
-            masks_paths       :   dir with masks
-            fold              :   number of validation fold
+        Perform saving run parameters into file.
     """
-
-    images_paths = Path(images_paths)
-    masks_paths = Path(masks_paths)
-
-    images_paths = sorted(list(map(str, images_paths.glob("*"))))
-    masks_paths = sorted(list(map(str, masks_paths.glob("*"))))
-
-    if len(images_paths) < 5:
-        raise RuntimeError("Length of images_paths less then 5.")
-
-    if fold not in range(1,6):
-        raise ValueError("Invalid fold number: {}. 'fold' can be 1,2,3,4 or 5.".format(fold))
-
-    #Urban unmarked
-    uu_imgs_paths = list(filter(lambda p: p.split("/")[-1].startswith("uu_"), images_paths))
-    uu_masks_paths = list(filter(lambda p: p.split("/")[-1].startswith("uu_"), masks_paths))
-
-    #Urban marked
-    um_imgs_paths = list(filter(lambda p: p.split("/")[-1].startswith("um_"), images_paths))
-    um_masks_paths = list(filter(lambda p: p.split("/")[-1].startswith("um_"), masks_paths))
-
-    #Urban multiple mark
-    umm_imgs_paths = list(filter(lambda p: p.split("/")[-1].startswith("umm_"), images_paths))
-    umm_masks_paths = list(filter(lambda p: p.split("/")[-1].startswith("umm_"), masks_paths))
-
-    assert len(uu_imgs_paths) == len(uu_masks_paths), "Error. uu_imgs_paths and uu_masks_paths has differnet length."
-    assert len(um_imgs_paths) == len(um_masks_paths), "Error. um_imgs_paths and um_masks_paths has differnet length."
-    assert len(umm_imgs_paths) == len(umm_masks_paths), "Error. umm_imgs_paths and umm_masks_paths has differnet length."
-
-    uu_imgs_per_fold = round(len(uu_imgs_paths) / 5)
-    um_imgs_per_fold = round(len(um_imgs_paths) / 5)
-    umm_imgs_per_fold = round(len(umm_imgs_paths) / 5)
-
-    #train urban unmarked
-    if fold == 5:
-        #UU
-        valid_uu_imgs_paths = uu_imgs_paths[-(len(uu_imgs_paths)-uu_imgs_per_fold*4):]
-        valid_uu_masks_paths = uu_masks_paths[-(len(uu_imgs_paths)-uu_imgs_per_fold*4):]
-        train_uu_imgs_paths = list(set(uu_imgs_paths) - set(valid_uu_imgs_paths))
-        train_uu_masks_paths = list(set(uu_masks_paths) - set(valid_uu_masks_paths))
-
-        #UM
-        valid_um_imgs_paths = um_imgs_paths[-(len(um_imgs_paths)-um_imgs_per_fold*4):]
-        valid_um_masks_paths = um_masks_paths[-(len(um_imgs_paths)-um_imgs_per_fold*4):]
-        train_um_imgs_paths = list(set(um_imgs_paths) - set(valid_um_imgs_paths))
-        train_um_masks_paths = list(set(um_masks_paths) - set(valid_um_masks_paths))
-
-        #UMM
-        valid_umm_imgs_paths = umm_imgs_paths[-(len(umm_imgs_paths)-umm_imgs_per_fold*4):]
-        valid_umm_masks_paths = umm_masks_paths[-(len(umm_imgs_paths)-umm_imgs_per_fold*4):]
-        train_umm_imgs_paths = list(set(umm_imgs_paths) - set(valid_umm_imgs_paths))
-        train_umm_masks_paths = list(set(umm_masks_paths) - set(valid_umm_masks_paths))
-    else:
-        #UU
-        valid_uu_imgs_paths = uu_imgs_paths[:fold*uu_imgs_per_fold][-uu_imgs_per_fold:]
-        valid_uu_masks_paths = uu_masks_paths[:fold*uu_imgs_per_fold][-uu_imgs_per_fold:]
-        train_uu_imgs_paths = list(set(uu_imgs_paths) - set(valid_uu_imgs_paths))
-        train_uu_masks_paths = list(set(uu_masks_paths) - set(valid_uu_masks_paths))
-
-        #UM
-        valid_um_imgs_paths = um_imgs_paths[:fold*um_imgs_per_fold][-um_imgs_per_fold:]
-        valid_um_masks_paths = um_masks_paths[:fold*um_imgs_per_fold][-um_imgs_per_fold:]
-        train_um_imgs_paths = list(set(um_imgs_paths) - set(valid_um_imgs_paths))
-        train_um_masks_paths = list(set(um_masks_paths) - set(valid_um_masks_paths))
-
-        #UMM
-        valid_umm_imgs_paths = umm_imgs_paths[:fold*umm_imgs_per_fold][-umm_imgs_per_fold:]
-        valid_umm_masks_paths = umm_masks_paths[:fold*umm_imgs_per_fold][-umm_imgs_per_fold:]
-        train_umm_imgs_paths = list(set(umm_imgs_paths) - set(valid_umm_imgs_paths))
-        train_umm_masks_paths = list(set(umm_masks_paths) - set(valid_umm_masks_paths))
-
-    #total train
-    train_imgs_total = train_uu_imgs_paths + train_um_imgs_paths + train_umm_imgs_paths
-    train_masks_total = train_uu_masks_paths + train_um_masks_paths + train_umm_masks_paths
-
-    #total valid
-    valid_imgs_total = valid_uu_imgs_paths + valid_um_imgs_paths + valid_umm_imgs_paths
-    valid_masks_total = valid_uu_masks_paths + valid_um_masks_paths + valid_umm_masks_paths
-
-    return ((train_imgs_total, train_masks_total), (valid_imgs_total, valid_masks_total))
+    with open(str(file_path), "w") as file:
+        file.write(json.dumps(params, indent=True, sort_keys=True))
 
 
-def train_routine(console_logger: logging.Logger,
+def train_routine(
+    args,
+    console_logger: logging.Logger,
     root: str, 
-    model_name: str,
     model: nn.Module, 
     criterion, 
     optimizer,
@@ -154,14 +75,16 @@ def train_routine(console_logger: logging.Logger,
     train_loader, 
     valid_loader,
     validation,
+    fold,
     n_epochs=100,
     status_every=5):
 
     """
         General trainig routine.
         params:
+            args                    : argument parser parameters for saving it
             console_logger          : logger object for logging
-            model_name              : name of a training model
+            root                    : root dir where stores trained models
             model                   : model for training
             criterion               : loss function
             optimizer               : SGD, Adam or other
@@ -169,6 +92,7 @@ def train_routine(console_logger: logging.Logger,
             train_loader            :
             valid_loader            :
             validation              : validation routine
+            fold                    : number of fold
             n_epochs                : number of training epochs
             status_every            : the parameter which controls the frequency of status printing
     """
@@ -177,11 +101,14 @@ def train_routine(console_logger: logging.Logger,
     root = Path(root)
     root.mkdir(exist_ok=True, parents=True)
 
-    model_root = root / model_name
+    model_root = root / args.model_type / 'model{}'.format(fold)
     model_root.mkdir(exist_ok=True, parents=True)
 
     model_path = model_root / 'model.pt'
     logging_path = model_root / 'train.log'
+
+    #run params saving
+    save_runparams(vars(args), file_path=(model_root / 'rparams.txt'))
     
     #file logger definition
     file_logger = logging.getLogger("file-logger")
@@ -202,11 +129,10 @@ def train_routine(console_logger: logging.Logger,
         model.load_state_dict(state["model"]) 
         console_logger.info("\nModel '{0}' was restored. Best Jaccard: {1}, Best DICE: {2}, Epoch: {3}".format(str(model_path), best_jaccard, best_dice, epoch))
     else:
-        epoch = 0
+        epoch = 1
         best_jaccard = 0
         best_dice = 0
     
-    epoch += 1
     n_epochs = n_epochs + epoch
     best_model = copy.deepcopy(model.state_dict())
 
@@ -297,7 +223,36 @@ def train_routine(console_logger: logging.Logger,
     file_logger.info(info_str)
 
     #model saving
-    save_model(str(model_path), best_model, best_jaccard, best_dice, n_epochs+1)
+    save_model(str(model_path), best_model, best_jaccard, best_dice, n_epochs)
+
+
+def validation_routine(model: nn.Module, criterion, valid_loader):
+    """
+        This method by the given criterion, model and validation loader calculates Jaccard and DICE metrics with the validation loss.
+    """
+    with torch.set_grad_enabled(False):
+        valid_losses = []
+        jaccards = []
+        dices = []
+
+        model.eval()
+        for idx, batch in enumerate(valid_loader):
+            inputs, targets = batch
+            inputs = to_gpu(inputs)
+            targets = to_gpu(targets)
+            outputs = model(inputs)
+
+            loss = criterion(targets, outputs)
+            valid_losses.append(loss.item())
+            jaccards += batch_jaccard(targets, (outputs > 0).float())
+            dices += batch_dice(targets, (outputs > 0).float())
+
+        #Calculates losses
+        valid_loss = np.mean(valid_losses).astype(dtype=np.float64)
+        valid_jaccard = np.mean(jaccards).astype(dtype=np.float64)  
+        valid_dice = np.mean(dices).astype(dtype=np.float64)      
+        
+        return {"val_loss": valid_loss, "val_jacc": valid_jaccard, "val_dice": valid_dice}
 
 
 def shutdown_system():
