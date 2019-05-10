@@ -1,41 +1,12 @@
 """
-    This module contains utils for validation
+    This module contains some metrics
 """
 
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
-
 import numpy as np
-from utils import to_gpu
-
-def validation_binary(model: nn.Module, criterion, valid_loader):
-    with torch.set_grad_enabled(False):
-        valid_losses = []
-        jaccards = []
-        dices = []
-
-        model.eval()
-        for idx, batch in enumerate(valid_loader):
-            inputs, targets = batch
-            inputs = to_gpu(inputs)
-            targets = to_gpu(targets)
-            outputs = model(inputs)
-
-            loss = criterion(targets, outputs)
-            valid_losses.append(loss.item())
-            jaccards += calc_jaccard(targets, (outputs > 0).float())
-            dices += calc_dice(targets, (outputs > 0).float())
-
-        #Calculates losses
-        valid_loss = np.mean(valid_losses).astype(dtype=np.float64)
-        valid_jaccard = np.mean(jaccards).astype(dtype=np.float64)  
-        valid_dice = np.mean(dices).astype(dtype=np.float64)      
-        
-        return {"val_loss": valid_loss, "val_jacc": valid_jaccard, "val_dice": valid_dice}
 
 
-def calc_jaccard(target: torch.Tensor, predict: torch.Tensor):
+def batch_jaccard(target: torch.Tensor, predict: torch.Tensor):
     eps = 1e-15
     intersection = (target * predict).sum(dim=-2).sum(dim=-1)
     union = target.sum(dim=-2).sum(dim=-1) + predict.sum(dim=-2).sum(dim=-1)
@@ -43,9 +14,23 @@ def calc_jaccard(target: torch.Tensor, predict: torch.Tensor):
     return list(jaccard.data.cpu().numpy())
 
 
-def calc_dice(target: torch.Tensor, predict: torch.Tensor):
+def batch_dice(target: torch.Tensor, predict: torch.Tensor):
     eps = 1e-15
     intersection = (target * predict).sum(dim=-2).sum(dim=-1)
     union = target.sum(dim=-2).sum(dim=-1) + predict.sum(dim=-2).sum(dim=-1)
     dice = (2 * intersection + eps) / (union + eps)
     return list(dice.data.cpu().numpy())
+
+
+def jaccard(target: torch.Tensor, predict: torch.Tensor):
+    eps = 1e-15
+    intersection = (target * predict).sum().float()
+    union = target.sum().float() + predict.sum().float()
+    return ((intersection + eps) / (union - intersection + eps)).cpu().item()
+
+
+def dice(target: torch.Tensor, predict: torch.Tensor):
+    eps = 1e-15
+    intersection = (target * predict).sum()
+    union = target.sum() + predict.sum()
+    return ((2 * intersection + eps) / (union + eps)).cpu().item()
