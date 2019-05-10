@@ -35,7 +35,9 @@ class EncoderBlockM1(nn.Module):
                             padding=self.padding)
         
         self.activation = nn.ReLU(inplace=True)
-        self.bn = nn.BatchNorm2d(self.out_channels)
+
+        if self.bn_enable:
+            self.bn = nn.BatchNorm2d(self.out_channels)
 
     def forward(self, x):
         x = self.conv(x)
@@ -74,9 +76,14 @@ class DecoderBlockM1(nn.Module):
                                                                                                            stride=self.stride,
                                                                                                            padding=self.padding)
 
-        self.conv = nn.Conv2d(in_channels=self.in_channels, out_channels=self.out_channels, kernel_size=1)
-        self.activation = nn.ReLU(inplace=True)
-        self.bn = nn.BatchNorm2d(self.out_channels)
+        if self.upsample:
+            self.conv = nn.Conv2d(in_channels=self.in_channels, out_channels=self.out_channels, kernel_size=1)
+        
+        if self.act_enable:
+            self.activation = nn.ReLU(inplace=True)
+
+        if self.bn_enable:
+            self.bn = nn.BatchNorm2d(self.out_channels)
 
     def forward(self, x):
         x = self.deconv(x)
@@ -118,19 +125,22 @@ class RekNetM1(nn.Module):
 
         self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
 
-        self.encoder1 = EncoderBlockM1(3, 32, bn_enable=self.ebn_enable)
-        self.encoder2 = EncoderBlockM1(32, 32, bn_enable=self.ebn_enable)
-        self.encoder3 = EncoderBlockM1(32, 64, bn_enable=self.ebn_enable)
-        self.encoder4 = EncoderBlockM1(64, 64, bn_enable=self.ebn_enable)
-        self.encoder5 = EncoderBlockM1(64, 128, bn_enable=self.ebn_enable)
-        
-        self.center = EncoderBlockM1(128, 128, bn_enable=self.ebn_enable)
-        
-        self.decoder5 = DecoderBlockM1(128, 64, bn_enable=self.dbn_enable, upsample=self.upsample_enable)
-        self.decoder4 = DecoderBlockM1(64, 64, bn_enable=self.dbn_enable, upsample=self.upsample_enable)
-        self.decoder3 = DecoderBlockM1(64, 32, bn_enable=self.dbn_enable, upsample=self.upsample_enable)
-        self.decoder2 = DecoderBlockM1(32, 32, bn_enable=self.dbn_enable, upsample=self.upsample_enable)
-        self.decoder1 = DecoderBlockM1(32, 1, bn_enable=False, upsample=self.upsample_enable, act_enable=False)
+        self.encoder_block1 = EncoderBlockM1(3, 32, bn_enable=self.ebn_enable)
+        self.encoder_block2 = EncoderBlockM1(32, 32, bn_enable=self.ebn_enable)
+        self.encoder_block3 = EncoderBlockM1(32, 64, bn_enable=self.ebn_enable)
+        self.encoder_block4 = EncoderBlockM1(64, 64, bn_enable=self.ebn_enable)
+        self.encoder_block5 = EncoderBlockM1(64, 128, bn_enable=self.ebn_enable)
+        self.encoder_block6 = EncoderBlockM1(128, 256, bn_enable=self.ebn_enable)
+
+        # self.center = EncoderBlockM1(128, 128, bn_enable=self.ebn_enable)
+        self.center = EncoderBlockM1(256, 256, bn_enable=self.ebn_enable)
+
+        self.decoder_block6 = DecoderBlockM1(256, 128, bn_enable=self.dbn_enable, upsample=self.upsample_enable)
+        self.decoder_block5 = DecoderBlockM1(128, 64, bn_enable=self.dbn_enable, upsample=self.upsample_enable)
+        self.decoder_block4 = DecoderBlockM1(64, 64, bn_enable=self.dbn_enable, upsample=self.upsample_enable)
+        self.decoder_block3 = DecoderBlockM1(64, 32, bn_enable=self.dbn_enable, upsample=self.upsample_enable)
+        self.decoder_block2 = DecoderBlockM1(32, 32, bn_enable=self.dbn_enable, upsample=self.upsample_enable)
+        self.decoder_block1 = DecoderBlockM1(32, 1, bn_enable=False, upsample=self.upsample_enable, act_enable=False)
 
 
         #Initialization
@@ -142,27 +152,30 @@ class RekNetM1(nn.Module):
                     m.weight.data.fill_(1)
                     m.bias.data.zero_()
         elif self.init_type == "Xavier":
-            raise NotImplementedError("This type of initialization in not implemented.")
+            raise NotImplementedError("This type of initialization is not implemented.")
 
     def forward(self, x):
-        x = self.encoder1(x)
+        x = self.encoder_block1(x)
         x = self.pool(x)
-        x = self.encoder2(x)
+        x = self.encoder_block2(x)
         x = self.pool(x)
-        x = self.encoder3(x)
+        x = self.encoder_block3(x)
         x = self.pool(x)
-        x = self.encoder4(x)
+        x = self.encoder_block4(x)
         x = self.pool(x)
-        x = self.encoder5(x)
+        x = self.encoder_block5(x)
+        x = self.pool(x)
+        x = self.encoder_block6(x)
         x = self.pool(x)
 
         x = self.center(x)
 
-        x = self.decoder5(x)
-        x = self.decoder4(x)
-        x = self.decoder3(x)
-        x = self.decoder2(x)
-        x = self.decoder1(x)
+        x = self.decoder_block6(x)
+        x = self.decoder_block5(x)
+        x = self.decoder_block4(x)
+        x = self.decoder_block3(x)
+        x = self.decoder_block2(x)
+        x = self.decoder_block1(x)
 
         return x
 
