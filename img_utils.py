@@ -13,6 +13,11 @@ class ImageSpecifications:
     imageShape_max = (376, 1242)
     img_extension = ".png"
 
+    #Class factors
+    uu_cat = 50
+    um_cat = 100
+    umm_cat = 150
+
 
 def alpha_overlay(img, gt_image, color=(0, 255, 0), alpha=0.5):
     """
@@ -73,6 +78,17 @@ def pad(img, required_size=ImageSpecifications.imageShape_max, background_value=
         return new_img
     else:
         raise ValueError("\'background_value\' is not valid: {}".format(background_value))
+
+
+def normalize(img, mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)):
+    mean=np.array(mean, dtype=np.float32) * 255
+    std=np.array(std, dtype=np.float32) * 255
+    denominator = np.reciprocal(std, dtype=np.float32)
+
+    img2 = img.copy().astype(dtype=np.float32)
+    img2 -= mean
+    img2 *= denominator
+    return img2
 
 
 def getGroundTruth(fileNameGT, make_pad=False):
