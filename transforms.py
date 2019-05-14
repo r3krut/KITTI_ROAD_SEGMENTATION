@@ -44,4 +44,5 @@ def valid_tranformations(prob=1.0):
  
 
 def test_trasformations(prob=1.0):
-    pass
+    return Compose([
+        PadIfNeeded(min_height=384, min_width=1280, border_mode=cv2.BORDER_CONSTANT, value=(0, 0, 0), always_apply=True)], p=prob)
