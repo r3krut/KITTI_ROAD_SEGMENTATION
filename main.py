@@ -12,11 +12,10 @@ from pathlib import Path
 import utils
 import img_utils as imutils
 
-from models import RekNetM1
+from models import RekNetM1, RekNetM2
 from utils import count_params
-from losses import BCEJaccardLoss
-from road_dataset import RoadDataset
-from metrics import validation
+from losses import BCEJaccardLoss, CCEJaccardLoss
+from road_dataset import RoadDataset, RoadDataset2
 
 from transforms import (
     train_transformations,
@@ -26,29 +25,48 @@ from transforms import (
 import torch
 import torch.nn as nn
 from torch.optim import SGD, Adam
+from torch.optim.lr_scheduler import ReduceLROnPlateau, StepLR, MultiStepLR
 from torch.utils.data import DataLoader
 import torch.backends.cudnn as cudnn
 import torch.backends.cudnn
+
+from data_processing import (
+    droped_valid_image_2_dir,
+    train_masks_dir,
+    crossval_split,
+    image_2_dir
+)
 
 #For reproducibility
 torch.manual_seed(111)
 
 def main(*args, **kwargs):
     parser = argparse.ArgumentParser(description="Argument parser for the main module. Main module represents train procedure.")
-    parser.add_argument("--root-dir", type=str, required=True, help="Path to the root dir.")
-    parser.add_argument("--model-name", type=str, required=True, help="Name of model.")
+    parser.add_argument("--root-dir", type=str, required=True, help="Path to the root dir where will be stores models.")
     parser.add_argument("--dataset-path", type=str, required=True, help="Path to the KITTI dataset which contains 'testing' and 'training' subdirs.")
+    parser.add_argument("--fold", type=int, default=1, help="Num of a validation fold.")
     
     #optimizer options
     parser.add_argument("--optim", type=str, default="SGD", help="Type of optimizer: SGD or Adam")
     parser.add_argument("--lr", type=float, default=1e-3, help="Learning rates for optimizer.")
     parser.add_argument("--momentum", type=float, default=0.9, help="Momentum for SGD optim.")
+    
+    #Scheduler options
+    parser.add_argument("--scheduler", type=str, default="multi-step", help="Type of a scheduler for LR scheduling.")
+    parser.add_argument("--step-st", type=int, default=5, help="Step size for StepLR scheudle.")
+    parser.add_argument("--milestones", type=str, default="30,70,90", help="List with milestones for MultiStepLR schedule.")
+    parser.add_argument("--gamma", type=float, default=0.1, help="Gamma parameter for StepLR and MultiStepLR schedule.")
+    parser.add_argument("--patience", type=int, default=5, help="Patience parameter for ReduceLROnPlateau schedule.")
+    
 
     #model params
+    parser.add_argument("--model-type", type=str, default="reknetm1", help="Type of model. Can be 'RekNetM1' or 'RekNetM2'.")
     parser.add_argument("--decoder-type", type=str, default="up", help="Type of decoder module. Can be 'up'(Upsample) or 'ConvTranspose2D'.")
     parser.add_argument("--init-type", type=str, default="He", help="Initialization type. Can be 'He' or 'Xavier'.")
-    parser.add_argument("--enc-bn-enable", type=bool, default=True, help="Batch normalization enabling in encoder module.")
-    parser.add_argument("--dec-bn-enable", type=bool, default=True, help="Batch normalization enabling in decoder module.")
+    parser.add_argument("--act-type", type=str, default="relu", help="Activation type. Can be ReLU, CELU or FTSwish+.")
+    parser.add_argument("--enc-bn-enable", type=int, default=1, help="Batch normalization enabling in encoder module.")
+    parser.add_argument("--dec-bn-enable", type=int, default=1, help="Batch normalization enabling in decoder module.")
+    # parser.add_argument("--skip-conn", type=int, default=0, help="UNet-like skip-connections enabling.")
 
     #other options
     parser.add_argument("--n-epochs", type=int, default=100, help="Number of training epochs.")
@@ -70,6 +88,9 @@ def main(*args, **kwargs):
 
     console_logger.info(args)
 
+    #number of classes
+    num_classes = 1
+
     if args.decoder_type == "up":
         upsample_enable = True
         console_logger.info("Decoder type is Upsample.")
@@ -78,11 +99,26 @@ def main(*args, **kwargs):
         console_logger.info("Decoder type is ConvTranspose2D.")
 
     #Model definition
-    model = RekNetM1(num_classes=1, 
-        ebn_enable=args.enc_bn_enable, 
-        dbn_enable=args.dec_bn_enable, 
-        upsample_enable=upsample_enable, 
-        init_type=args.init_type)
+    if args.model_type == "reknetm1":
+        model = RekNetM1(num_classes=num_classes, 
+            ebn_enable=bool(args.enc_bn_enable),
+            dbn_enable=bool(args.dec_bn_enable), 
+            upsample_enable=upsample_enable, 
+            act_type=args.act_type,
+            init_type=args.init_type)
+        console_logger.info("Uses RekNetM1 as the model.")
+    elif args.model_type == "reknetm2":
+        model = RekNetM2(num_classes=num_classes,
+            ebn_enable=bool(args.enc_bn_enable), 
+            dbn_enable=bool(args.dec_bn_enable), 
+            upsample_enable=upsample_enable, 
+            act_type=args.act_type,
+            init_type=args.init_type)
+        console_logger.info("Uses RekNetM2 as the model.")
+    else:
+        raise ValueError("Unknown model type: {}".format(args.model_type))
+
+    console_logger.info("Number of trainable parameters: {}".format(utils.count_params(model)[1]))
 
     #Move model to devices
     if torch.cuda.is_available():
@@ -95,11 +131,20 @@ def main(*args, **kwargs):
 
     #Loss definition
     loss = BCEJaccardLoss(alpha=args.alpha)
-    
-    train_dataset = RoadDataset(dataset_path=Path(args.dataset_path), transforms=train_transformations())
-    valid_dataset = RoadDataset(dataset_path=Path(args.dataset_path), transforms=valid_tranformations(), is_valid=True)
-    train_loader = DataLoader(dataset=train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, pin_memory=True)
-    valid_loader = DataLoader(dataset=train_dataset, batch_size=args.batch_size, num_workers=args.num_workers, pin_memory=True)
+
+    dataset_path = Path(args.dataset_path)
+    images = str(dataset_path / "training" / droped_valid_image_2_dir)
+    masks = str(dataset_path / "training" / train_masks_dir)
+
+    #train-val splits for cross-validation by a fold
+    ((train_imgs, train_masks), 
+        (valid_imgs, valid_masks)) = crossval_split(images_paths=images, masks_paths=masks, fold=args.fold)
+
+    train_dataset = RoadDataset2(img_paths=train_imgs, mask_paths=train_masks, transforms=train_transformations())
+    valid_dataset = RoadDataset2(img_paths=valid_imgs, mask_paths=valid_masks, transforms=valid_tranformations())
+    valid_fmeasure_datset = RoadDataset2(img_paths=valid_imgs, mask_paths=valid_masks, transforms=valid_tranformations(), fmeasure_eval=True)
+    train_loader = DataLoader(dataset=train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, pin_memory=torch.cuda.is_available())
+    valid_loader = DataLoader(dataset=valid_dataset, batch_size=torch.cuda.device_count(), num_workers=args.num_workers, pin_memory=torch.cuda.is_available())
 
     console_logger.info("Train dataset length: {}".format(len(train_dataset)))
     console_logger.info("Validation dataset length: {}".format(len(valid_dataset)))
@@ -107,23 +152,39 @@ def main(*args, **kwargs):
     #Optim definition
     if args.optim == "SGD":
         optim = SGD(params=model.parameters(), lr=args.lr, momentum=args.momentum)
-        console_logger.info("Uses the SGD optimizer with lr={0} and momentum={1}".format(args.lr, args.momentum))
+        console_logger.info("Uses the SGD optimizer with initial lr={0} and momentum={1}".format(args.lr, args.momentum))
     else:
         optim = Adam(params=model.parameters(), lr=args.lr)
-        console_logger.info("Uses the Adam optimizer with lr={0}".format(args.lr))
+        console_logger.info("Uses the Adam optimizer with initial lr={0}".format(args.lr))
 
-    valid = validation
+    if args.scheduler == "step":
+        lr_scheduler = StepLR(optimizer=optim, step_size=args.step_st, gamma=args.gamma)
+        console_logger.info("Uses the StepLR scheduler with step={} and gamma={}.".format(args.step_st, args.gamma))
+    elif args.scheduler == "multi-step":
+        lr_scheduler = MultiStepLR(optimizer=optim, milestones=[int(m) for m in (args.milestones).split(",")], gamma=args.gamma)
+        console_logger.info("Uses the MultiStepLR scheduler with milestones=[{}] and gamma={}.".format(args.milestones, args.gamma))
+    elif args.scheduler == "rlr-plat":
+        lr_scheduler = ReduceLROnPlateau(optimizer=optim, patience=args.patience, verbose=True)
+        console_logger.info("Uses the ReduceLROnPlateau scheduler.")
+    else:
+        raise ValueError("Unknown type of schedule: {}".format(args.scheduler))
+
+    valid = utils.binary_validation_routine
 
     utils.train_routine(
+        args=args,
         console_logger=console_logger,
         root=args.root_dir,
-        model_name=args.model_name,
         model=model,
         criterion=loss,
         optimizer=optim,
+        scheduler=lr_scheduler,
         train_loader=train_loader,
         valid_loader=valid_loader,
+        fm_eval_dataset=valid_fmeasure_datset,
         validation=valid,
+        fold=args.fold,
+        num_classes=num_classes,
         n_epochs=args.n_epochs,
         status_every=args.status_every
     )
