@@ -60,8 +60,19 @@ def prepare_train_valid(path2train):
 
         road_maks, valid_mask = getGroundTruth(gt_images_path_list[idx])
         
-        road_maks = road_maks.astype(dtype=np.uint8) * 255
-        valid_mask = (~valid_mask).astype(dtype=np.uint8) * 255
+        # if db_name == "uu":
+        #     factor = ImageSpecifications.uu_cat
+        # elif db_name == "um":
+        #     factor = ImageSpecifications.um_cat
+        # elif db_name == "umm":
+        #     factor = ImageSpecifications.umm_cat
+        # else:
+        #     raise ValueError("Unknowm category name: {}".format(db_name))
+
+        factor = 255
+
+        road_maks = road_maks.astype(dtype=np.uint8) * factor
+        valid_mask = (~valid_mask).astype(dtype=np.uint8) * factor
     
         cv2.imwrite(str(train_masks / (db_name + '_' + num + ImageSpecifications.img_extension)), road_maks)
         cv2.imwrite(str(valid_masks / (db_name + '_' + num + ImageSpecifications.img_extension)), valid_mask)
