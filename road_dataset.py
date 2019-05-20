@@ -14,6 +14,9 @@ from pathlib import Path
 import torch
 from torch.utils.data import Dataset, DataLoader
 
+#Divide factor
+class_factor = 50
+
 class RoadDataset(Dataset):
     def __init__(self, dataset_path, transforms=None, is_valid=False, is_test=False):
         """
@@ -50,7 +53,10 @@ class RoadDataset(Dataset):
                 img = load_image_(str(self.images_paths[idx]))
                 valid_mask = load_mask_(str(self.valid_labels_paths[idx]))
                 train_mask = load_mask_(str(self.train_labels_paths[idx]))
-                img = img * np.expand_dims((train_mask == 0), axis=2)
+                img[:, :, 0] *= (train_mask == 0)
+                img[:, :, 1] *= (train_mask == 0)
+                img[:, :, 2] *= (train_mask == 0)
+                # img = img * np.expand_dims((train_mask == 0), axis=2)
                 if self.transforms:
                     augmented = self.transforms(image=img, mask=valid_mask)
                     img, valid_mask = augmented["image"], augmented["mask"] 
@@ -59,7 +65,10 @@ class RoadDataset(Dataset):
                 img = load_image_(str(self.images_paths[idx]))
                 valid_mask = load_mask_(str(self.valid_labels_paths[idx]))
                 train_mask = load_mask_(str(self.train_labels_paths[idx]))
-                img = img * np.expand_dims((valid_mask == 0), axis=2)
+                # img = img * np.expand_dims((valid_mask == 0), axis=2)
+                img[:, :, 0] *= (valid_mask == 0)
+                img[:, :, 1] *= (valid_mask == 0)
+                img[:, :, 2] *= (valid_mask == 0)
                 if self.transforms:
                     augmented = self.transforms(image=img, mask=train_mask)
                     img, train_mask = augmented["image"], augmented["mask"] 
@@ -70,17 +79,19 @@ class RoadDataset2(Dataset):
     """
         This dataset represents a data without source validation areas.
     """
-    def __init__(self, img_paths, mask_paths, transforms=None):
+    def __init__(self, img_paths, mask_paths, transforms=None, fmeasure_eval=False):
         """
             params:
                 img_paths         : list with paths to source images
                 maks_paths        : list with paths to masks
                 transforms        : transformations
+                fmeasure_eval     : if True then method __getitem__ will return image, mask and it's path. Otherwise image and mask
         """
         super().__init__()
         self.img_paths = sorted(img_paths)
         self.mask_paths = sorted(mask_paths)
         self.transforms = transforms
+        self.fmeasure_eval = fmeasure_eval
 
         assert len(self.img_paths) == len(self.mask_paths), "Error. 'img_paths' and 'mask_paths' has different length."
 
@@ -95,8 +106,11 @@ class RoadDataset2(Dataset):
             augmented = self.transforms(image=img, mask=mask)
             img, mask = augmented["image"], augmented["mask"]
         
-        return numpy_to_tensor(img).float(), torch.from_numpy(np.expand_dims(mask, 0)).float() 
-        
+        if self.fmeasure_eval:
+            return numpy_to_tensor(img).float(), mask, self.img_paths[idx]
+        else:
+            return numpy_to_tensor(img).float(), torch.from_numpy(np.expand_dims(mask, 0)).float() 
+
 
 def numpy_to_tensor(img: np.ndarray):
     return torch.from_numpy(np.transpose(img, (2, 0, 1)))
