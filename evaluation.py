@@ -8,10 +8,12 @@ import numpy as np
 from pathlib import Path
 
 from utils import to_gpu
-from models import RekNetM1
+from models import RekNetM1, RekNetM2
 from metrics import (
     jaccard,
     dice,
+    evalExp,
+    pxEval_maximizeFMeasure
 )
 
 #Dataset 
@@ -115,9 +117,6 @@ def evaluate(path2models, model: nn.Module, threshold: float, holdout_dataset: s
 
             predict = (sum_predicts / len(models_list)).float()
 
-            # print("Max value: {}".format(predict.max()))
-            # print("Min value: {}".format(predict.min()))
-
             jacc = jaccard(mask, (predict > threshold).float()) 
             d = dice(mask, (predict > threshold).float())
             
@@ -140,10 +139,11 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     #This part of code is hard because RekNetM1 has many parameters.
-    model = RekNetM1(num_classes=1, 
+    model = RekNetM2(num_classes=1, 
             ebn_enable=True, 
             dbn_enable=True, 
             upsample_enable=False, 
+            act_type="celu",
             init_type="He")
 
     model = nn.DataParallel(model, device_ids=None).cuda()
