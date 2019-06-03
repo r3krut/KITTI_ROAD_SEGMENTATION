@@ -7,8 +7,8 @@ import argparse
 import numpy as np
 from pathlib import Path
 
-from utils import to_gpu
-from models import RekNetM1, RekNetM2
+from utils import to_gpu, fmeasure_evaluation
+from models import RekNetM1, RekNetM2, LidCamNet
 from metrics import (
     jaccard,
     dice,
@@ -46,6 +46,7 @@ def evaluate(path2models, model: nn.Module, threshold: float, holdout_dataset: s
     mask_paths = list(map(str, (holdout_dataset / 'masks').glob('*')))
 
     test_dataset = RoadDataset2(img_paths=img_paths, mask_paths=mask_paths, transforms=valid_tranformations())
+    fmax_test_datset = RoadDataset2(img_paths=img_paths, mask_paths=mask_paths, transforms=valid_tranformations(), fmeasure_eval=True)
 
     #metrics lists
     jaccards = []
@@ -82,8 +83,9 @@ def evaluate(path2models, model: nn.Module, threshold: float, holdout_dataset: s
 
         evaluation_jaccard = np.mean(jaccards).astype(dtype=np.float64)
         evaluation_dice = np.mean(dices).astype(dtype=np.float64)
+        uu_metrics, um_metrics, umm_metrics = fmeasure_evaluation([model], valid_dataset=fmax_test_datset)
 
-        return {"eval_jacc" : evaluation_jaccard, "eval_dice" : evaluation_dice}
+        return {"eval_jacc" : evaluation_jaccard, "eval_dice" : evaluation_dice}, uu_metrics, um_metrics, umm_metrics
     else:
         #Imporant! path2models dir should contains a few subdirs. These subdirs by itself contains models which were trained on folds.
         list_models_paths = sorted(list(path2models.glob('*')))
@@ -125,31 +127,51 @@ def evaluate(path2models, model: nn.Module, threshold: float, holdout_dataset: s
 
         evaluation_jaccard = np.mean(jaccards).astype(dtype=np.float64)
         evaluation_dice = np.mean(dices).astype(dtype=np.float64)
+        uu_metrics, um_metrics, umm_metrics = fmeasure_evaluation(models_list, valid_dataset=fmax_test_datset)
 
-        return {"eval_jacc" : evaluation_jaccard, "eval_dice" : evaluation_dice}
+        return {"eval_jacc" : evaluation_jaccard, "eval_dice" : evaluation_dice}, uu_metrics, um_metrics, umm_metrics
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser("Evaluation module params.")
     parser.add_argument("--models-paths", type=str, required=True, help="Path to a single model(or multiple models)")
+    parser.add_argument("--model-type", type=str, default="reknetm1", help="Type of model. Can be reknetm1 or reknetm2.")
     parser.add_argument("--thresh", type=float, default=0.5)
     parser.add_argument("--holdout-path", type=str, required=True, help="Path to a dir which contains hold-out dataset for evaluation(must contains 'imgs' and 'masks' subdirs).")
     parser.add_argument("--eval-one", type=int, default=1)
 
     args = parser.parse_args()
 
-    #This part of code is hard because RekNetM1 has many parameters.
-    model = RekNetM2(num_classes=1, 
-            ebn_enable=True, 
-            dbn_enable=True, 
-            upsample_enable=False, 
-            act_type="celu",
-            init_type="He")
+    if args.model_type == "reknetm1":
+        model = RekNetM1(num_classes=1, 
+                ebn_enable=True, 
+                dbn_enable=True, 
+                upsample_enable=False, 
+                act_type="celu",
+                init_type="He")
+    elif args.model_type == "reknetm2":
+        model = RekNetM2(num_classes=1, 
+                ebn_enable=True, 
+                dbn_enable=True, 
+                upsample_enable=False, 
+                act_type="celu",
+                init_type="He",
+                attention=True)
+    elif args.model_type == "lcm":
+        model = LidCamNet(num_classes=1,
+                bn_enable=False)
+    else:
+        raise ValueError("Unknown model: {}".format(args.model_type))
 
-    model = nn.DataParallel(model, device_ids=None).cuda()
+    if torch.cuda.is_available():
+        model = nn.DataParallel(model, device_ids=None).cuda()
 
-    eval_metrics = evaluate(path2models=args.models_paths, model=model, threshold=args.thresh, holdout_dataset=args.holdout_path, evaluate_one=bool(args.eval_one))
+    jd_metrics, uu_metrics, um_metrics, umm_metrics = evaluate(path2models=args.models_paths, model=model, threshold=args.thresh, holdout_dataset=args.holdout_path, evaluate_one=bool(args.eval_one))
 
-    print("Evaluation done!")
-    print("Evaluation Jaccard: {}".format(eval_metrics["eval_jacc"]))
-    print("Evaluation DICE: {}".format(eval_metrics["eval_dice"]))
+    print("Evaluation done for {} model(s) {}!".format(("single" if bool(args.eval_one) else "multiple"), args.models_paths))
+    print("Evaluation Jaccard: {}".format(jd_metrics["eval_jacc"]))
+    print("Evaluation DICE: {}\n".format(jd_metrics["eval_dice"]))
+
+    print("UU_MaxF: {}, UU_AvgPrec: {}, UU_PRE: {}, UU_REC: {}".format(uu_metrics["MaxF"], uu_metrics["AvgPrec"], uu_metrics["PRE_wp"][0], uu_metrics["REC_wp"][0]))
+    print("UM_MaxF: {}, UM_AvgPrec: {}, UM_PRE: {}, UM_REC: {}".format(um_metrics["MaxF"], um_metrics["AvgPrec"], um_metrics["PRE_wp"][0], um_metrics["REC_wp"][0]))
+    print("UMM_MaxF: {}, UMM_AvgPrec: {}, UMM_PRE: {}, UMM_REC: {}".format(umm_metrics["MaxF"], umm_metrics["AvgPrec"], umm_metrics["PRE_wp"][0], umm_metrics["REC_wp"][0]))
