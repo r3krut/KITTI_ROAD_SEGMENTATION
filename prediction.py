@@ -14,7 +14,7 @@ import torch.nn.functional as F
 import utils
 from road_dataset import load_image_, numpy_to_tensor
 from img_utils import alpha_overlay, normalize
-from models import RekNetM1, RekNetM2
+from models import RekNetM1, RekNetM2, LidCamNet
 
 from transforms import test_trasformations
 
@@ -182,10 +182,15 @@ if __name__ == "__main__":
             upsample_enable=False, 
             init_type="He")
         print("Uses RekNetM2 as the model.")
+    elif args.model_type == "lcn":
+        model = LidCamNet(num_classes=1,
+            bn_enable=False)
+        print("Uses LidCamNet as the model.")
     else:
         raise ValueError("Unknown model type: {}".format(args.model_type))
 
-    model = nn.DataParallel(model, device_ids=None).cuda()
+    if torch.cuda.is_available():
+        model = nn.DataParallel(model, device_ids=None).cuda()
 
     model_list = nn.ModuleList()
     if model_path.is_file():

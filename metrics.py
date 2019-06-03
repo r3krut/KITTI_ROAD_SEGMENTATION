@@ -197,15 +197,11 @@ def pxEval_maximizeFMeasure(totalPosNum, totalNegNum, totalFN, totalFP, thresh =
     prob_eval_scores['AvgPrec'] = AvgPrec
     prob_eval_scores['MaxF'] = MaxF
 
-    #prob_eval_scores['totalFN'] = totalFN
-    #prob_eval_scores['totalFP'] = totalFP
     prob_eval_scores['totalPosNum'] = totalPosNum
     prob_eval_scores['totalNegNum'] = totalNegNum
 
     prob_eval_scores['precision'] = precision
     prob_eval_scores['recall'] = recall
-    #prob_eval_scores['precision_bst'] = precision_bst
-    #prob_eval_scores['recall_bst'] = recall_bst
     prob_eval_scores['thresh'] = thresh
     if not thresh is None:
         BestThresh= thresh[index]
