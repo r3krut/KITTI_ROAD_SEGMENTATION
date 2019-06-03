@@ -157,7 +157,7 @@ if __name__ == "__main__":
                 act_type="celu",
                 init_type="He",
                 attention=True)
-    elif args.model_type == "lcm":
+    elif args.model_type == "lcn":
         model = LidCamNet(num_classes=1,
                 bn_enable=False)
     else:
