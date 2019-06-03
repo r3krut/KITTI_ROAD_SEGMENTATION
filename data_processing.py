@@ -197,12 +197,15 @@ def crossval_split(images_paths: str, masks_paths: str, fold=5):
     return ((train_imgs_total, train_masks_total), (valid_imgs_total, valid_masks_total))
 
 
-def prepare_holdout_dataset(path2data, test_fraction=0.2):
+def prepare_holdout_dataset(path2data, test_fraction=0.2, original=True, rnd=False, state=111):
     """
         This method splits a train dataset on train and hold-out data and save this data in a separately directory.
         Params:
             path2data       : dir which contains 'training' and 'testing' subdirs.
             test_fraction   : part of a test data in percent
+            orignal         : droped or original
+            rnd             : random selection or not
+            state           : state for random generator
     """
 
     assert test_fraction <= 0.9 and test_fraction > 0, "Error. Invalid test_fraction param: {}".format(test_fraction)
@@ -215,7 +218,7 @@ def prepare_holdout_dataset(path2data, test_fraction=0.2):
     (holdout_path / 'imgs').mkdir(exist_ok=True, parents=True)
     (holdout_path / 'masks').mkdir(exist_ok=True, parents=True)
 
-    train_images_paths = path2data / 'training' / droped_valid_image_2_dir
+    train_images_paths = path2data / 'training' / droped_valid_image_2_dir if not original else path2data / 'training' / image_2_dir
     train_masks_paths = path2data / 'training' / train_masks_dir
 
     images_paths = sorted(list(map(str, train_images_paths.glob("*"))))
@@ -237,14 +240,34 @@ def prepare_holdout_dataset(path2data, test_fraction=0.2):
     assert len(um_imgs_paths) == len(um_masks_paths), "Error. um_imgs_paths and um_masks_paths has differnet length."
     assert len(umm_imgs_paths) == len(umm_masks_paths), "Error. umm_imgs_paths and umm_masks_paths has differnet length."
 
-    #train\holdout uu
-    train_uu_imgs, test_uu_imgs, train_uu_masks, test_uu_masks = train_test_split(uu_imgs_paths, uu_masks_paths, test_size=test_fraction, random_state=111)
+    if rnd:
+        #train\holdout uu
+        train_uu_imgs, test_uu_imgs, train_uu_masks, test_uu_masks = train_test_split(uu_imgs_paths, uu_masks_paths, test_size=test_fraction, random_state=state)
+        #train\holdout um
+        train_um_imgs, test_um_imgs, train_um_masks, test_um_masks = train_test_split(um_imgs_paths, um_masks_paths, test_size=test_fraction, random_state=state)
+        #train\holdout umm
+        train_umm_imgs, test_umm_imgs, train_umm_masks, test_umm_masks = train_test_split(umm_imgs_paths, umm_masks_paths, test_size=test_fraction, random_state=state)
+    else:
+        #UU
+        uu_len = len(uu_imgs_paths)
+        n = round(uu_len * test_fraction)
+        step = round(uu_len//n)
+        test_uu_imgs, test_uu_masks = uu_imgs_paths[::step], uu_masks_paths[::step]
+        train_uu_imgs, train_uu_masks = list(set(uu_imgs_paths) - set(test_uu_imgs)), list(set(uu_masks_paths) - set(test_uu_masks))
 
-    #train\holdout um
-    train_um_imgs, test_um_imgs, train_um_masks, test_um_masks = train_test_split(um_imgs_paths, um_masks_paths, test_size=test_fraction, random_state=111)
+        #UM
+        um_len = len(um_imgs_paths)
+        n = round(um_len * test_fraction)
+        step = round(um_len//n)
+        test_um_imgs, test_um_masks = um_imgs_paths[::step], um_masks_paths[::step]
+        train_um_imgs, train_um_masks = list(set(um_imgs_paths) - set(test_um_imgs)), list(set(um_masks_paths) - set(test_um_masks))
 
-    #train\holdout umm
-    train_umm_imgs, test_umm_imgs, train_umm_masks, test_umm_masks = train_test_split(umm_imgs_paths, umm_masks_paths, test_size=test_fraction, random_state=111)
+        #UMM
+        umm_len = len(umm_imgs_paths)
+        n = round(umm_len * test_fraction)
+        step = round(umm_len//n)
+        test_umm_imgs, test_umm_masks = umm_imgs_paths[::step], umm_masks_paths[::step]
+        train_umm_imgs, train_umm_masks = list(set(umm_imgs_paths) - set(test_umm_imgs)), list(set(umm_masks_paths) - set(test_umm_masks))
 
     #Total train
     total_train_imgs = train_uu_imgs + train_um_imgs + train_umm_imgs
@@ -282,6 +305,6 @@ if __name__ == "__main__":
 
     # prepare_train_valid(args.train_dir)
     # drop_valid(args.train_dir)
-    prepare_holdout_dataset(path2data=args.train_dir)
+    prepare_holdout_dataset(path2data=args.train_dir, original=False)
 
     print("Done!")
