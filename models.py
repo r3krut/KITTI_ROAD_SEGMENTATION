@@ -11,6 +11,62 @@ from torchvision import models
 
 from activations import FTSwishPlus
 
+class ChannelAttention(nn.Module):
+    """
+        The channel attention module for CBAM - https://arxiv.org/pdf/1807.06521.pdf
+        Code was taken from: https://github.com/luuuyi/CBAM.PyTorch/blob/master/model/resnet_cbam.py
+    """
+    def __init__(self, in_planes, ratio=16, act_type="relu"):
+        super(ChannelAttention, self).__init__()
+        self.ratio = ratio
+        self.act_type = act_type
+        self.avg_pool = nn.AdaptiveAvgPool2d(1)
+        self.max_pool = nn.AdaptiveMaxPool2d(1)
+
+        self.fc1 = nn.Conv2d(in_planes, in_planes // self.ratio, 1, bias=False)
+        self.fc2 = nn.Conv2d(in_planes // self.ratio, in_planes, 1, bias=False)
+
+        if self.act_type == "relu":
+            self.act = nn.ReLU(inplace=True)
+        elif self.act_type == "celu":
+            self.act = nn.CELU(inplace=True)
+        elif self.act_type == "fts+":
+            self.act = FTSwishPlus()
+        else:
+            raise ValueError("Unknown value: {}".format(self.act_type))
+
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, x):
+        avg_out = self.fc2(self.act(self.fc1(self.avg_pool(x))))
+        max_out = self.fc2(self.act(self.fc1(self.max_pool(x))))
+        out = avg_out + max_out
+
+        return self.sigmoid(out)
+
+
+class SpatialAttention(nn.Module):
+    """
+        The spatial attention module for CBAM - https://arxiv.org/pdf/1807.06521.pdf
+        Code was taken from: https://github.com/luuuyi/CBAM.PyTorch/blob/master/model/resnet_cbam.py
+    """
+    def __init__(self, kernel_size=7):
+        super(SpatialAttention, self).__init__()
+
+        assert kernel_size in (3, 7), 'kernel size must be 3 or 7'
+        padding = 3 if kernel_size == 7 else 1
+
+        self.conv1 = nn.Conv2d(2, 1, kernel_size, padding=padding, bias=False)
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, x):
+        avg_out = torch.mean(x, dim=1, keepdim=True)
+        max_out, _ = torch.max(x, dim=1, keepdim=True)
+        x = torch.cat([avg_out, max_out], dim=1)
+        x = self.conv1(x)
+
+        return self.sigmoid(x)
+
 
 class ConvBNAct(nn.Module):
     """
@@ -324,14 +380,15 @@ class CenterBlock3(nn.Module):
     """
         This is PSP-like module with custom modifications
     """
-    def __init__(self, in_channels=256, settings=[(3,1,1),(3,2,2)], fusion_type="cat", act_type="relu", use_skip=True):
+    def __init__(self, in_channels=256, settings=[(3,1,1),(3,2,2)], fusion_type="cat", act_type="relu", attention=False, use_skip=True):
         """
             Params:
                 in_channels     : input channels
                 settings        : (kernel_size, dilation_h, dilation_w)   
-                fustion_type    : type of fustion. Can be "cat" or "sam"
+                fustion_type    : type of fustion. Can be "cat" or "sum"
                 act_type        : activation type
-                use_skip        : if True then source tensor will be reduction with others, else not.
+                attention       : CBAM attention enabling
+                use_skip        : if True then source tensor will be reductioned with others, else not.
         """
         super().__init__()
 
@@ -340,9 +397,14 @@ class CenterBlock3(nn.Module):
         self.act_type = act_type
         self.settings = settings
         self.fusion_type = fusion_type
+        self.attention = attention
         self.use_skip = use_skip
         self.in_channels = in_channels
         self.out_channels = self.in_channels // len(self.settings) 
+
+        if self.attention:
+            self.ca = ChannelAttention(self.out_channels, act_type=self.act_type)
+            self.sa = SpatialAttention(kernel_size=3)
 
         self.pyramid = []
         for s in self.settings:
@@ -362,15 +424,25 @@ class CenterBlock3(nn.Module):
             result = [x] if self.use_skip else []
             for p in self.pyramid:
                 res_x = p(x)
+                
+                if self.attention:
+                    res_x = self.ca(res_x) * res_x
+                    res_x = self.sa(res_x) * res_x
+
                 result.append(res_x) 
             return torch.cat(result, dim=1)         #concatination of features
         elif self.fusion_type == "sum":
             result = []
             for p in self.pyramid:
                 res_x = p(x)
+
+                if self.attention:
+                    res_x = self.ca(res_x) * res_x
+                    res_x = self.sa(res_x) * res_x
+
                 result.append(res_x)
-            result = torch.cat(result, dim=1)       #sum of features
-            return x + result
+            result = torch.cat(result, dim=1)      
+            return x + result                       #sum of features
         else:
             raise RuntimeError("Unknown fusion type: {}".format(self.fusion_type))
 
@@ -470,6 +542,8 @@ class RekNetM2(nn.Module):
             ebn_enable=True, 
             dbn_enable=True, 
             upsample_enable=False,
+            attention=True,
+            use_skip=True,
             act_type="relu", 
             init_type="He"):
         """
@@ -478,6 +552,8 @@ class RekNetM2(nn.Module):
                 ebn_enable      : encoder batch norm
                 dbn_enable      : decoder batch norm
                 upsample_enable : nn.Upsample used if this parameter is True, else nn.ConvTranspose2D used.
+                attention       : CBAM attention
+                use_skip        : skip-connection in Context Module
                 act_type        : type of activation. Can be Relu, Celu or FTSwish+
                 init_type       : type of initialization: He or Xavier
         """
@@ -486,6 +562,8 @@ class RekNetM2(nn.Module):
         self.ebn_enable = ebn_enable
         self.dbn_enable = dbn_enable
         self.upsample_enable = upsample_enable
+        self.attention = attention
+        self.use_skip = use_skip
         self.act_type = act_type
         self.init_type = init_type
 
@@ -522,12 +600,12 @@ class RekNetM2(nn.Module):
         # self.center = CenterBlock(num_channels=256, act_type=self.act_type)                                                    
 
         self.center = nn.Sequential(
-            CenterBlock3(in_channels=256, settings=[(3,1,2),(3,1,3),(3,1,4),(3,1,5)], use_skip=False, act_type=self.act_type),
+            CenterBlock3(in_channels=256, settings=[(3,1,2),(3,1,3),(3,1,4),(3,1,5)], attention=self.attention, use_skip=self.use_skip, act_type=self.act_type),
             nn.Dropout2d(p=.25)
         )
 
         self.decoder_block5 = nn.Sequential(
-            DecoderBlockM1(256 + 256, 128, bn_enable=self.dbn_enable, upsample=self.upsample_enable, act_type=self.act_type),
+            DecoderBlockM1(256 + (512 if self.use_skip else 256), 128, bn_enable=self.dbn_enable, upsample=self.upsample_enable, act_type=self.act_type),
             ConvBNAct(128, 128, act_type=self.act_type)
         )
         self.decoder_block4 = nn.Sequential(
@@ -589,3 +667,89 @@ class RekNetM2(nn.Module):
 
         return x_out
 
+
+def ConvBlock(in_ch, out_ch, ks=3, stride=1, padding=1, dilation=1, bn_enable=True):
+    block = [nn.Conv2d(in_ch, out_ch, kernel_size=ks, stride=stride, padding=padding, dilation=dilation)]
+    if bn_enable:
+        block.append(nn.BatchNorm2d(out_ch))
+    block.append(nn.ELU(inplace=True))
+    return nn.Sequential(*block)
+
+
+def DeconvBlock(in_ch, out_ch, ks=4, stride=2, bn_enable=True, conv_enable=True):
+    block = [nn.ConvTranspose2d(in_ch, out_ch, kernel_size=ks, stride=stride, padding=1)]
+    if bn_enable:
+        block.append(nn.BatchNorm2d(out_ch))
+    block.append(nn.ELU(inplace=True))
+    if conv_enable:
+        block.append(ConvBlock(out_ch, out_ch, bn_enable=bn_enable))
+    return nn.Sequential(*block)
+
+
+class LidCamNet(nn.Module):
+    """
+        This is implementaion of FCN from https://arxiv.org/pdf/1809.07941.pdf
+    """
+    def __init__(self, num_classes=1, input_channels=32, bn_enable=False, init_type="He"):
+        super(LidCamNet, self).__init__()
+
+        self.num_classes = num_classes
+        self.input_channels = input_channels
+        self.bn_enable = bn_enable
+        self.init_type = init_type
+
+        self.encoder = nn.Sequential(
+            ConvBlock(3, self.input_channels, ks=4, stride=2, bn_enable=self.bn_enable),                                #1/2
+            ConvBlock(self.input_channels, self.input_channels, bn_enable=self.bn_enable),
+            ConvBlock(self.input_channels, self.input_channels * 2, ks=4, stride=2, bn_enable=self.bn_enable),          #1/4
+            ConvBlock(self.input_channels * 2, self.input_channels * 2, bn_enable=self.bn_enable),
+            ConvBlock(self.input_channels * 2, self.input_channels * 4, ks=4, stride=2, bn_enable=self.bn_enable),      #1/8
+        )
+
+        self.center = nn.Sequential(
+            ConvBlock(self.input_channels * 4, self.input_channels * 4, ks=3, bn_enable=self.bn_enable),                                    #6
+            nn.Dropout2d(0.25),
+            ConvBlock(self.input_channels * 4, self.input_channels * 4, ks=3, bn_enable=self.bn_enable),                                    #7
+            nn.Dropout2d(0.25),
+            ConvBlock(self.input_channels * 4, self.input_channels * 4, ks=3, dilation=(1,2), padding=(1,2), bn_enable=self.bn_enable),     #8
+            nn.Dropout2d(0.25),
+            ConvBlock(self.input_channels * 4, self.input_channels * 4, ks=3, dilation=(2,4), padding=(2,4), bn_enable=self.bn_enable),     #9
+            nn.Dropout2d(0.25),
+            ConvBlock(self.input_channels * 4, self.input_channels * 4, ks=3, dilation=(4,8), padding=(4,8), bn_enable=self.bn_enable),     #10
+            nn.Dropout2d(0.25), 
+            ConvBlock(self.input_channels * 4, self.input_channels * 4, ks=3, dilation=(8,16), padding=(8,16), bn_enable=self.bn_enable),   #11
+            nn.Dropout2d(0.25),
+            ConvBlock(self.input_channels * 4, self.input_channels * 4, ks=3, dilation=(16,32), padding=(16,32), bn_enable=self.bn_enable), #12
+            nn.Dropout2d(0.25),
+            ConvBlock(self.input_channels * 4, self.input_channels * 4, ks=3, bn_enable=self.bn_enable),                                    #13
+            nn.Dropout2d(0.25),
+            ConvBlock(self.input_channels * 4, self.input_channels * 4, ks=1, padding=0, bn_enable=self.bn_enable),                         #14
+            nn.Dropout2d(0.25),
+        )
+
+        self.decoder = nn.Sequential(
+            DeconvBlock(self.input_channels * 4, self.input_channels * 2, bn_enable=self.bn_enable),
+            DeconvBlock(self.input_channels * 2, self.input_channels, bn_enable=self.bn_enable),
+            DeconvBlock(self.input_channels, 8, bn_enable=self.bn_enable, conv_enable=False),
+            nn.Conv2d(8, self.num_classes, kernel_size=3, padding=1)
+        )
+
+        #Initialization
+        if self.init_type == "He":
+            for m in self.modules():
+                if isinstance(m, (nn.Conv2d)):
+                    nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+                    if m.bias is not None:
+                        m.bias.data.zero_() 
+                elif isinstance(m, nn.BatchNorm2d):
+                    m.weight.data.fill_(1)
+                    m.bias.data.zero_()
+        elif self.init_type == "Xavier":
+            raise NotImplementedError("This type of initialization is not implemented.")
+
+    def forward(self, x):
+        x = self.encoder(x)
+        x = self.center(x)
+        x = self.decoder(x)
+
+        return x
