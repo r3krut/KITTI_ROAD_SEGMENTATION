@@ -12,7 +12,7 @@ from pathlib import Path
 import utils
 import img_utils as imutils
 
-from models import RekNetM1, RekNetM2
+from models import RekNetM1, RekNetM2, LidCamNet
 from utils import count_params
 from losses import BCEJaccardLoss, CCEJaccardLoss
 from road_dataset import RoadDataset, RoadDataset2
@@ -36,6 +36,9 @@ from data_processing import (
     crossval_split,
     image_2_dir
 )
+
+from polylr_scheduler import PolyLR
+
 
 #For reproducibility
 torch.manual_seed(111)
@@ -66,7 +69,8 @@ def main(*args, **kwargs):
     parser.add_argument("--act-type", type=str, default="relu", help="Activation type. Can be ReLU, CELU or FTSwish+.")
     parser.add_argument("--enc-bn-enable", type=int, default=1, help="Batch normalization enabling in encoder module.")
     parser.add_argument("--dec-bn-enable", type=int, default=1, help="Batch normalization enabling in decoder module.")
-    # parser.add_argument("--skip-conn", type=int, default=0, help="UNet-like skip-connections enabling.")
+    parser.add_argument("--skip-conn", type=int, default=0, help="Skip-connection in context module.")
+    parser.add_argument("--attention", type=int, default=0, help="Attention mechanism in context module.")
 
     #other options
     parser.add_argument("--n-epochs", type=int, default=100, help="Number of training epochs.")
@@ -113,8 +117,14 @@ def main(*args, **kwargs):
             dbn_enable=bool(args.dec_bn_enable), 
             upsample_enable=upsample_enable, 
             act_type=args.act_type,
-            init_type=args.init_type)
+            init_type=args.init_type,
+            attention=bool(args.attention),
+            use_skip=bool(args.skip_conn))
         console_logger.info("Uses RekNetM2 as the model.")
+    elif args.model_type == "lcn":
+        model = LidCamNet(num_classes=num_classes,
+            bn_enable=False)
+        console_logger.info("Uses LinCamNet as the model.")
     else:
         raise ValueError("Unknown model type: {}".format(args.model_type))
 
@@ -166,6 +176,9 @@ def main(*args, **kwargs):
     elif args.scheduler == "rlr-plat":
         lr_scheduler = ReduceLROnPlateau(optimizer=optim, patience=args.patience, verbose=True)
         console_logger.info("Uses the ReduceLROnPlateau scheduler.")
+    elif args.scheduler == "poly":
+        lr_scheduler = PolyLR(optimizer=optim, num_epochs=args.n_epochs, alpha=args.gamma)
+        console_logger.info("Uses the PolyLR scheduler.")
     else:
         raise ValueError("Unknown type of schedule: {}".format(args.scheduler))
 
