@@ -211,7 +211,7 @@ def train_routine(
         #Train mode
         model.train()
         
-        #LR step for MultiStepLR scheduler
+        #scheduler step
         scheduler.step()
 
         try:
@@ -232,7 +232,7 @@ def train_routine(
             
             #Validation
             valid_dict = validation(model, criterion, valid_loader)
-            uu_metrics, um_metrics, umm_metrics = fmeasure_evaluation(model, fm_eval_dataset)
+            uu_metrics, um_metrics, umm_metrics = fmeasure_evaluation([model], fm_eval_dataset)
 
             train_losses.append(epoch_train_loss)
             valid_losses.append(valid_dict["val_loss"])
@@ -404,10 +404,14 @@ def multi_validation_routine(model: nn.Module, criterion, valid_loader, num_clas
         return {"val_loss": mean_valid_loss, "val_jacc": mean_jaccard, "val_dice": mean_dice, "per_class_jacc": jaccards_pc, "per_class_dice": dices_pc}
 
 
-def fmeasure_evaluation(model: nn.Module, valid_dataset):
+def fmeasure_evaluation(models: nn.ModuleList, valid_dataset):
     """
-        This method by the given model and validation dataset calculates F-max measure, Precision, Recall and others metrics
+        This method by the given models and validation dataset calculates F-max measure, Precision, Recall and others metrics
     """
+
+    #Eval mode for all models
+    for model in models:
+        model.eval() 
 
     thresh = np.array(range(0,256))/255.0
     
@@ -429,18 +433,23 @@ def fmeasure_evaluation(model: nn.Module, valid_dataset):
     umm_totalPosNum = 0
     umm_totalNegNum = 0
 
-    model.eval()
+
     for idx, batch in enumerate(valid_dataset):
         img, mask, path = batch
-        img = to_gpu(img.unsqueeze(0).contiguous())
+        img = to_gpu(img.unsqueeze(0).contiguous().float())
         mask = mask.astype(dtype=np.bool)
 
-        with torch.set_grad_enabled(False):
-            predict = model(img)
+        #Averaging all predictions for one point of validation data
+        sum_predicts = to_gpu(torch.zeros((1, 1, mask.shape[0], mask.shape[1])).float())    
         
-        prob = F.sigmoid(predict).squeeze(0).squeeze(0).data.cpu().numpy().astype(dtype=np.float32) #probs
+        for model in models:
+            with torch.set_grad_enabled(False):
+                predict = model(img)
+            sum_predicts += F.sigmoid(predict)
+        
+        probs = (sum_predicts / len(models)).squeeze(0).squeeze(0).data.cpu().numpy().astype(dtype=np.float32)
 
-        FN, FP, posNum, negNum = evalExp(mask, prob, thresh, validMap=None, validArea=None)
+        FN, FP, posNum, negNum = evalExp(mask, probs, thresh, validMap=None, validArea=None)
 
         cat = path.split("/")[-1].split(".")[0].split("_")[0]
         if cat == "uu":
