@@ -13,8 +13,7 @@ from models.reknetm1 import RekNetM1
 from models.reknetm2 import RekNetM2
 from models.lidcamnet_fcn import LidCamNet
 
-from misc.transforms import valid_tranformations
-from misc.metrics import (
+from .metrics import (
     jaccard,
     dice,
     evalExp,
@@ -23,6 +22,8 @@ from misc.metrics import (
 
 #Dataset 
 from data_processing.road_dataset import RoadDataset2
+
+from .transforms import valid_tranformations
 
 #torch imports
 import torch

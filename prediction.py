@@ -11,12 +11,16 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-import utils
-from road_dataset import load_image_, numpy_to_tensor
-from img_utils import alpha_overlay, normalize
-from models import RekNetM1, RekNetM2, LidCamNet
+import utils.utils as utils
+from utils.img_utils import alpha_overlay, normalize
 
-from transforms import test_trasformations
+from data_processing.road_dataset import load_image_, numpy_to_tensor
+
+from models.reknetm1 import RekNetM1
+from models.reknetm2 import RekNetM2
+from models.lidcamnet_fcn import LidCamNet
+
+from misc.transforms import test_trasformations
 
 def predict(models: nn.ModuleList, img_path, path2save, thresh=0.5):
     """

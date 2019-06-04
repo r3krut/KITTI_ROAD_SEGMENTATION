@@ -6,14 +6,12 @@
 #
 #   ======================================================
 
-cd "project_dir/"
-
 #
 #   ============LidCamNet=============
 #
 #fold1
 python3 main.py \
-    --root-dir 'models/' \
+    --root-dir 'trained_models/' \
     --dataset-path '../../TMPDataSets/KITTI_ROAD/data_road/' \
     --optim 'Adam' \
     --lr 0.0005 \
@@ -28,7 +26,7 @@ python3 main.py \
 
 #fold2
 python3 main.py \
-    --root-dir 'models/' \
+    --root-dir 'trained_models/' \
     --dataset-path '../../TMPDataSets/KITTI_ROAD/data_road/' \
     --optim 'Adam' \
     --lr 0.0005 \
@@ -43,7 +41,7 @@ python3 main.py \
 
 #fold3
 python3 main.py \
-    --root-dir 'models/' \
+    --root-dir 'trained_models/' \
     --dataset-path '../../TMPDataSets/KITTI_ROAD/data_road/' \
     --optim 'Adam' \
     --lr 0.0005 \
@@ -58,7 +56,7 @@ python3 main.py \
 
 #fold4
 python3 main.py \
-    --root-dir 'models/' \
+    --root-dir 'trained_models/' \
     --dataset-path '../../TMPDataSets/KITTI_ROAD/data_road/' \
     --optim 'Adam' \
     --lr 0.0005 \
@@ -73,7 +71,7 @@ python3 main.py \
 
 #fold5
 python3 main.py \
-    --root-dir 'models/' \
+    --root-dir 'trained_models/' \
     --dataset-path '../../TMPDataSets/KITTI_ROAD/data_road/' \
     --optim 'Adam' \
     --lr 0.0005 \
@@ -92,7 +90,7 @@ python3 main.py \
 #
 # fold 1
 python3 main.py \
-    --root-dir 'models/' \
+    --root-dir 'trained_models/' \
     --dataset-path '../../TMPDataSets/KITTI_ROAD/data_road/' \
     --act-type "celu" \
     --optim 'Adam' \
@@ -110,7 +108,7 @@ python3 main.py \
 
 #fold 2
 python3 main.py \
-    --root-dir 'models/' \
+    --root-dir 'trained_models/' \
     --dataset-path '../../TMPDataSets/KITTI_ROAD/data_road/' \
     --act-type "celu" \
     --optim 'Adam' \
@@ -128,7 +126,7 @@ python3 main.py \
 
 #fold 3
 python3 main.py \
-    --root-dir 'models/' \
+    --root-dir 'trained_models/' \
     --dataset-path '../../TMPDataSets/KITTI_ROAD/data_road/' \
     --act-type "celu" \
     --optim 'Adam' \
@@ -146,7 +144,7 @@ python3 main.py \
 
 #fold 4
 python3 main.py \
-    --root-dir 'models/' \
+    --root-dir 'trained_models/' \
     --dataset-path '../../TMPDataSets/KITTI_ROAD/data_road/' \
     --act-type "celu" \
     --optim 'Adam' \
@@ -164,7 +162,7 @@ python3 main.py \
 
 #fold 5
 python3 main.py \
-    --root-dir 'models/' \
+    --root-dir 'trained_models/' \
     --dataset-path '../../TMPDataSets/KITTI_ROAD/data_road/' \
     --act-type "celu" \
     --optim 'Adam' \
@@ -186,7 +184,7 @@ python3 main.py \
 #
 # fold 1
 python3 main.py \
-    --root-dir 'models/' \
+    --root-dir 'trained_models/' \
     --dataset-path '../../TMPDataSets/KITTI_ROAD/data_road/' \
     --act-type "celu" \
     --optim 'Adam' \
@@ -204,7 +202,7 @@ python3 main.py \
 
 #fold 2
 python3 main.py \
-    --root-dir 'models/' \
+    --root-dir 'trained_models/' \
     --dataset-path '../../TMPDataSets/KITTI_ROAD/data_road/' \
     --act-type "celu" \
     --optim 'Adam' \
@@ -222,7 +220,7 @@ python3 main.py \
 
 #fold 3
 python3 main.py \
-    --root-dir 'models/' \
+    --root-dir 'trained_models/' \
     --dataset-path '../../TMPDataSets/KITTI_ROAD/data_road/' \
     --act-type "celu" \
     --optim 'Adam' \
@@ -240,7 +238,7 @@ python3 main.py \
 
 #fold 4
 python3 main.py \
-    --root-dir 'models/' \
+    --root-dir 'trained_models/' \
     --dataset-path '../../TMPDataSets/KITTI_ROAD/data_road/' \
     --act-type "celu" \
     --optim 'Adam' \
@@ -258,7 +256,7 @@ python3 main.py \
 
 #fold 5
 python3 main.py \
-    --root-dir 'models/' \
+    --root-dir 'trained_models/' \
     --dataset-path '../../TMPDataSets/KITTI_ROAD/data_road/' \
     --act-type "celu" \
     --optim 'Adam' \
@@ -279,7 +277,7 @@ python3 main.py \
 #
 # fold 1
 python3 main.py \
-    --root-dir 'models/' \
+    --root-dir 'trained_models/' \
     --dataset-path '../../TMPDataSets/KITTI_ROAD/data_road/' \
     --act-type "celu" \
     --optim 'Adam' \
@@ -299,7 +297,7 @@ python3 main.py \
 
 #fold 2
 python3 main.py \
-    --root-dir 'models/' \
+    --root-dir 'trained_models/' \
     --dataset-path '../../TMPDataSets/KITTI_ROAD/data_road/' \
     --act-type "celu" \
     --optim 'Adam' \
@@ -319,7 +317,7 @@ python3 main.py \
 
 #fold 3
 python3 main.py \
-    --root-dir 'models/' \
+    --root-dir 'trained_models/' \
     --dataset-path '../../TMPDataSets/KITTI_ROAD/data_road/' \
     --act-type "celu" \
     --optim 'Adam' \
@@ -339,7 +337,7 @@ python3 main.py \
 
 #fold 4
 python3 main.py \
-    --root-dir 'models/' \
+    --root-dir 'trained_models/' \
     --dataset-path '../../TMPDataSets/KITTI_ROAD/data_road/' \
     --act-type "celu" \
     --optim 'Adam' \
@@ -359,7 +357,7 @@ python3 main.py \
 
 #fold 5
 python3 main.py \
-    --root-dir 'models/' \
+    --root-dir 'trained_trained_models/' \
     --dataset-path '../../TMPDataSets/KITTI_ROAD/data_road/' \
     --act-type "celu" \
     --optim 'Adam' \

@@ -9,15 +9,24 @@ import logging
 import numpy as np
 from pathlib import Path
 
-import utils
-import img_utils as imutils
+import utils.utils as utils
+import utils.img_utils as imutils
 
-from models import RekNetM1, RekNetM2, LidCamNet
-from utils import count_params
-from losses import BCEJaccardLoss, CCEJaccardLoss
-from road_dataset import RoadDataset, RoadDataset2
+from models.reknetm1 import RekNetM1
+from models.reknetm2 import RekNetM2
+from models.lidcamnet_fcn import LidCamNet
 
-from transforms import (
+from data_processing.road_dataset import RoadDataset, RoadDataset2
+from data_processing.data_processing import (
+    droped_valid_image_2_dir,
+    train_masks_dir,
+    crossval_split,
+    image_2_dir
+)
+
+from misc.losses import BCEJaccardLoss, CCEJaccardLoss
+from misc.polylr_scheduler import PolyLR
+from misc.transforms import (
     train_transformations,
     valid_tranformations,
 )
@@ -29,16 +38,6 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau, StepLR, MultiStepLR
 from torch.utils.data import DataLoader
 import torch.backends.cudnn as cudnn
 import torch.backends.cudnn
-
-from data_processing import (
-    droped_valid_image_2_dir,
-    train_masks_dir,
-    crossval_split,
-    image_2_dir
-)
-
-from polylr_scheduler import PolyLR
-
 
 #For reproducibility
 torch.manual_seed(111)
